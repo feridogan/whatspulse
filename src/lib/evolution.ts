@@ -49,6 +49,25 @@ async function getClient(): Promise<{ client: AxiosInstance; instance: string }>
   return { client, instance: config.instanceName };
 }
 
+function extractQRCode(data: any): string | null {
+  if (!data) return null;
+  if (typeof data === 'string') {
+    if (data.startsWith('data:image') || data.startsWith('iVBORw0KGgo') || data.length > 80) {
+      return data;
+    }
+  }
+  if (data.qrcode) {
+    if (typeof data.qrcode === 'string') return data.qrcode;
+    if (typeof data.qrcode === 'object') {
+      if (typeof data.qrcode.base64 === 'string') return data.qrcode.base64;
+      if (typeof data.qrcode.code === 'string') return data.qrcode.code;
+    }
+  }
+  if (typeof data.base64 === 'string') return data.base64;
+  if (typeof data.code === 'string' && data.code.length > 50) return data.code;
+  return null;
+}
+
 export class EvolutionService {
   /**
    * Check connection status of WhatsApp Instance
@@ -87,10 +106,12 @@ export class EvolutionService {
     try {
       const config = await getEvolutionConfig();
       const instanceName = customName?.trim() || config.instanceName;
+      const globalKey = config.globalApiKey || config.instanceKey || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+      
       const client = axios.create({
         baseURL: config.apiUrl,
         headers: {
-          'apikey': config.globalApiKey || config.instanceKey,
+          'apikey': globalKey,
           'Content-Type': 'application/json',
         },
         timeout: 30000,
@@ -101,43 +122,55 @@ export class EvolutionService {
       let instanceState = 'SCAN_QR_CODE';
       let responseData: any = null;
 
+      // 1. First, attempt to create the instance
       try {
-        // 1. Try creating instance
-        const payload = {
+        const payload: any = {
           instanceName: instanceName,
-          token: config.instanceKey || '',
           qrcode: true,
           integration: 'WHATSAPP-BAILEYS',
         };
 
         const res = await client.post('/instance/create', payload);
         responseData = res.data;
-        qrCodeString = res.data?.qrcode?.base64 || 
-                       res.data?.base64 || 
-                       (typeof res.data?.qrcode === 'string' ? res.data.qrcode : null) || 
-                       res.data?.code || null;
-        pairingCodeString = res.data?.pairingCode || null;
+        qrCodeString = extractQRCode(res.data);
+        pairingCodeString = res.data?.pairingCode || res.data?.qrcode?.pairingCode || null;
         instanceState = res.data?.instance?.state || res.data?.state || 'SCAN_QR_CODE';
       } catch (createErr: any) {
-        // 2. If instance already exists or error, fetch connect QR directly
-        const connectRes = await client.get(`/instance/connect/${instanceName}`);
-        responseData = connectRes.data;
-        qrCodeString = connectRes.data?.base64 || 
-                       connectRes.data?.qrcode?.base64 || 
-                       (typeof connectRes.data?.qrcode === 'string' ? connectRes.data.qrcode : null) || 
-                       connectRes.data?.code || null;
-        pairingCodeString = connectRes.data?.pairingCode || null;
-        instanceState = connectRes.data?.instance?.state || connectRes.data?.state || 'SCAN_QR_CODE';
+        const createErrData = createErr.response?.data;
+        const createErrMsg = JSON.stringify(createErrData || createErr.message || '').toLowerCase();
+        
+        // If instance already exists, fetch connect QR directly
+        if (
+          createErr.response?.status === 400 || 
+          createErr.response?.status === 403 || 
+          createErr.response?.status === 409 ||
+          createErrMsg.includes('already') ||
+          createErrMsg.includes('exists') ||
+          createErrMsg.includes('in use')
+        ) {
+          try {
+            const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instanceName)}`);
+            responseData = connectRes.data;
+            qrCodeString = extractQRCode(connectRes.data);
+            pairingCodeString = connectRes.data?.pairingCode || connectRes.data?.qrcode?.pairingCode || null;
+            instanceState = connectRes.data?.instance?.state || connectRes.data?.state || 'SCAN_QR_CODE';
+          } catch (connectErr: any) {
+            // If connect failed, re-throw with clear message
+            throw new Error(connectErr.response?.data?.message || connectErr.message || 'Instance bağlanamadı');
+          }
+        } else {
+          const errMsg = createErr.response?.data?.response?.message || 
+                         createErr.response?.data?.message || 
+                         createErr.message;
+          throw new Error(Array.isArray(errMsg) ? errMsg.join(', ') : errMsg);
+        }
       }
 
-      // 3. If QR string is still missing and not connected, try GET /instance/connect once more
+      // 2. If instance was created or connected but QR was not immediately in the body, try connect once
       if (!qrCodeString && instanceState !== 'open') {
         try {
-          const connectRes = await client.get(`/instance/connect/${instanceName}`);
-          qrCodeString = connectRes.data?.base64 || 
-                         connectRes.data?.qrcode?.base64 || 
-                         (typeof connectRes.data?.qrcode === 'string' ? connectRes.data.qrcode : null) || 
-                         connectRes.data?.code || null;
+          const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instanceName)}`);
+          qrCodeString = extractQRCode(connectRes.data);
           pairingCodeString = connectRes.data?.pairingCode || pairingCodeString;
           instanceState = connectRes.data?.instance?.state || connectRes.data?.state || instanceState;
         } catch (e) {}
@@ -163,44 +196,10 @@ export class EvolutionService {
   }
 
   /**
-   * Fetch QR code for WhatsApp Web connection
+   * Fetch QR code for WhatsApp Web connection (creates if missing)
    */
   static async getQRCode(customName?: string) {
-    try {
-      const config = await getEvolutionConfig();
-      const instanceName = customName?.trim() || config.instanceName;
-      const client = axios.create({
-        baseURL: config.apiUrl,
-        headers: {
-          'apikey': config.globalApiKey || config.instanceKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      });
-
-      const res = await client.get(`/instance/connect/${instanceName}`);
-      const qrCodeString = res.data?.base64 || 
-                           res.data?.qrcode?.base64 || 
-                           (typeof res.data?.qrcode === 'string' ? res.data.qrcode : null) || 
-                           res.data?.code || null;
-      return {
-        success: true,
-        instance: instanceName,
-        qrcode: qrCodeString,
-        pairingCode: res.data?.pairingCode || null,
-        state: res.data?.instance?.state || res.data?.state || 'SCAN_QR_CODE',
-        data: res.data,
-      };
-    } catch (error: any) {
-      // If 404 or not found, try creating instance
-      if (error.response?.status === 404) {
-        return this.createInstance(customName);
-      }
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message,
-      };
-    }
+    return this.createInstance(customName);
   }
 
   /**
