@@ -68,7 +68,7 @@ services:
       POSTGRES_PASSWORD: whatspulse_secret_2026
       POSTGRES_DB: whatspulse
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - whatspulse_pgdata_v1:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U whatspulse -d whatspulse"]
       interval: 5s
@@ -83,7 +83,7 @@ services:
     restart: always
     command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - whatspulse_redis_data_v1:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -93,8 +93,8 @@ services:
       - whatspulse-network
 
 volumes:
-  postgres_data:
-  redis_data:
+  whatspulse_pgdata_v1:
+  whatspulse_redis_data_v1:
 
 networks:
   whatspulse-network:
