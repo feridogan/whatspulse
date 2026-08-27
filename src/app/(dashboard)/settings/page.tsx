@@ -84,16 +84,16 @@ export default function SettingsPage() {
   const handleRegisterWebhook = async () => {
     try {
       setRegisteringWebhook(true);
-      const res = await fetch('/api/settings', {
+      setStatusMsg(null);
+      const res = await fetch('/api/evolution/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'register_webhook',
-          value: { webhookUrl: evoForm.webhookUrl },
+          url: evoForm.webhookUrl,
         }),
       });
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.success) {
         setStatusMsg({ type: 'success', text: 'Webhook başarıyla Evolution API sunucusuna kaydedildi!' });
       } else {
         setStatusMsg({ type: 'error', text: data.error || 'Webhook kaydedilemedi.' });

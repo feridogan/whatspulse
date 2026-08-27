@@ -186,28 +186,35 @@ export class EvolutionService {
 
   /**
    * Configure Webhook in Evolution API to push message events back to WhatsPulse
+   * Evolution API v2 standard
    */
   static async configureWebhook(webhookUrl: string) {
-    const { client, instance } = await getClient();
+    try {
+      const { client, instance } = await getClient();
 
-    const payload = {
-      url: webhookUrl,
-      webhook_by_events: false,
-      webhook_base64: false,
-      events: [
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'MESSAGES_SET',
-        'SEND_MESSAGE',
-        'CONNECTION_UPDATE',
-        'CONTACTS_UPSERT',
-        'CHATS_UPSERT',
-      ],
-    };
+      const payload = {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          byEvents: false,
+          base64: false,
+          events: [
+            'MESSAGES_UPSERT',
+            'MESSAGES_UPDATE',
+            'SEND_MESSAGE',
+            'CONNECTION_UPDATE',
+          ],
+        },
+      };
 
-    const res = await client.post(`/webhook/set/${instance}`, {
-      webhook: payload,
-    });
-    return res.data;
+      const res = await client.post(`/webhook/set/${instance}`, payload);
+      return res.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.response?.message || 
+                       error.response?.data?.message || 
+                       (typeof error.response?.data === 'string' ? error.response.data : null) ||
+                       error.message;
+      throw new Error(Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg);
+    }
   }
 }
