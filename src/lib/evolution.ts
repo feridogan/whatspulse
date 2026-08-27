@@ -72,22 +72,111 @@ export class EvolutionService {
   }
 
   /**
-   * Fetch QR code for WhatsApp Web connection
+   * Create a new WhatsApp Instance or connect to existing one
    */
-  static async getQRCode() {
+  static async createInstance(customName?: string) {
     try {
-      const { client, instance } = await getClient();
-      const res = await client.get(`/instance/connect/${instance}`);
-      return {
-        success: true,
-        qrcode: res.data?.base64 || res.data?.qrcode || res.data?.code || null,
-        pairingCode: res.data?.pairingCode || null,
-        state: res.data?.instance?.state || 'SCAN_QR_CODE',
+      const config = await getEvolutionConfig();
+      const instanceName = customName || config.instanceName;
+      const client = axios.create({
+        baseURL: config.apiUrl,
+        headers: {
+          'apikey': config.globalApiKey || config.instanceKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      // Try creating instance
+      const payload = {
+        instanceName: instanceName,
+        token: config.instanceKey || '',
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
       };
+
+      try {
+        const res = await client.post('/instance/create', payload);
+        return {
+          success: true,
+          created: true,
+          instance: res.data?.instance?.instanceName || instanceName,
+          qrcode: res.data?.qrcode?.base64 || res.data?.base64 || res.data?.qrcode || null,
+          pairingCode: res.data?.pairingCode || null,
+          state: res.data?.instance?.state || 'SCAN_QR_CODE',
+          data: res.data,
+        };
+      } catch (createErr: any) {
+        // If instance already exists or conflict, try connecting
+        const connectRes = await client.get(`/instance/connect/${instanceName}`);
+        return {
+          success: true,
+          created: false,
+          instance: instanceName,
+          qrcode: connectRes.data?.base64 || connectRes.data?.qrcode?.base64 || connectRes.data?.qrcode || connectRes.data?.code || null,
+          pairingCode: connectRes.data?.pairingCode || null,
+          state: connectRes.data?.instance?.state || 'SCAN_QR_CODE',
+          data: connectRes.data,
+        };
+      }
     } catch (error: any) {
+      const errorMsg = error.response?.data?.response?.message || 
+                       error.response?.data?.message || 
+                       error.message;
       return {
         success: false,
-        error: error.response?.data || error.message,
+        error: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+      };
+    }
+  }
+
+  /**
+   * Fetch QR code for WhatsApp Web connection
+   */
+  static async getQRCode(customName?: string) {
+    try {
+      const { client, instance } = await getClient();
+      const targetInstance = customName || instance;
+      const res = await client.get(`/instance/connect/${targetInstance}`);
+      return {
+        success: true,
+        qrcode: res.data?.base64 || res.data?.qrcode?.base64 || res.data?.qrcode || res.data?.code || null,
+        pairingCode: res.data?.pairingCode || null,
+        state: res.data?.instance?.state || 'SCAN_QR_CODE',
+        data: res.data,
+      };
+    } catch (error: any) {
+      // If 404 or not found, try creating instance
+      if (error.response?.status === 404) {
+        return this.createInstance(customName);
+      }
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message,
+      };
+    }
+  }
+
+  /**
+   * Logout / Disconnect WhatsApp instance
+   */
+  static async logoutInstance(customName?: string) {
+    try {
+      const { client, instance } = await getClient();
+      const targetInstance = customName || instance;
+      const res = await client.delete(`/instance/logout/${targetInstance}`);
+      return {
+        success: true,
+        message: 'Oturum başarıyla kapatıldı',
+        data: res.data,
+      };
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.response?.message || 
+                       error.response?.data?.message || 
+                       error.message;
+      return {
+        success: false,
+        error: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
       };
     }
   }

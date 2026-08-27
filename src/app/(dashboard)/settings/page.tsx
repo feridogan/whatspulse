@@ -38,6 +38,12 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [registeringWebhook, setRegisteringWebhook] = useState(false);
 
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const loadSettings = async () => {
     try {
       const res = await fetch('/api/settings');
@@ -73,11 +79,75 @@ export default function SettingsPage() {
       setTestingConnection(true);
       const res = await fetch('/api/evolution/status');
       const data = await res.json();
-      setConnectionState(data.state || (data.success ? 'CONNECTED' : 'DISCONNECTED'));
+      const st = data.state || (data.success ? 'CONNECTED' : 'DISCONNECTED');
+      setConnectionState(st);
+      return st;
     } catch (err) {
       setConnectionState('DISCONNECTED');
+      return 'DISCONNECTED';
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const handleFetchQRCode = async () => {
+    try {
+      setLoadingQr(true);
+      setQrModalOpen(true);
+      setStatusMsg(null);
+
+      // Call POST to create/connect instance
+      const res = await fetch('/api/evolution/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: evoForm.instanceName }),
+      });
+      const data = await res.json();
+
+      if (data.qrcode) {
+        setQrCodeData(data.qrcode.startsWith('data:') ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+      } else {
+        setQrCodeData(null);
+      }
+      setPairingCode(data.pairingCode || null);
+
+      if (data.state === 'open' || data.state === 'CONNECTED') {
+        setConnectionState('open');
+        setStatusMsg({ type: 'success', text: 'WhatsApp oturumu zaten aktif ve bağlı!' });
+      }
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: 'QR Kod alınamadı: ' + err.message });
+    } finally {
+      setLoadingQr(false);
+    }
+  };
+
+  const handleLogoutInstance = async () => {
+    if (!window.confirm(`"${evoForm.instanceName}" WhatsApp oturumunu kapatmak ve bağlantıyı kesmek istediğinize emin misiniz?`)) {
+      return;
+    }
+
+    try {
+      setLoggingOut(true);
+      setStatusMsg(null);
+      const res = await fetch('/api/evolution/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instance: evoForm.instanceName }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setConnectionState('close');
+        setStatusMsg({ type: 'success', text: 'WhatsApp oturumu başarıyla kapatıldı ve bağlantı kesildi.' });
+      } else {
+        setStatusMsg({ type: 'error', text: data.error || 'Oturum kapatılamadı.' });
+      }
+      checkEvolutionStatus();
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
+    } finally {
+      setLoggingOut(false);
     }
   };
 
@@ -151,6 +221,25 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
+  // Poll connection when QR modal is open
+  useEffect(() => {
+    let interval: any;
+    if (qrModalOpen) {
+      interval = setInterval(async () => {
+        const st = await checkEvolutionStatus();
+        if (st === 'open' || st === 'CONNECTED') {
+          clearInterval(interval);
+        }
+      }, 4000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [qrModalOpen]);
+
+  const isConnected = connectionState === 'open' || connectionState === 'CONNECTED';
+  const isConnecting = connectionState === 'connecting' || connectionState === 'SCAN_QR_CODE';
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
@@ -186,30 +275,56 @@ export default function SettingsPage() {
       )}
 
       {/* Evolution API Card */}
-      <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+      <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800">
           <div className="flex items-center gap-2">
             <Wifi className="w-5 h-5 text-emerald-400" />
             <h2 className="text-sm font-bold text-white">Harici Evolution API Bağlantısı</h2>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-              connectionState === 'open' || connectionState === 'CONNECTED'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+              isConnected
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                : isConnecting
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                : 'bg-red-500/20 text-red-400 border-red-500/30'
             }`}>
               Durum: {connectionState}
             </span>
+
             <button
-              onClick={checkEvolutionStatus}
+              onClick={() => checkEvolutionStatus()}
               disabled={testingConnection}
-              className="p-1.5 rounded-lg bg-gray-800 text-gray-300 hover:text-white"
-              title="Yenile"
+              className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors"
+              title="Bağlantı Durumunu Yenile"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${testingConnection ? 'animate-spin text-emerald-400' : ''}`} />
             </button>
           </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2.5 pt-1 pb-1">
+          <button
+            type="button"
+            onClick={handleFetchQRCode}
+            disabled={loadingQr}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all disabled:opacity-50"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>{loadingQr ? 'QR Yükleniyor...' : 'Yeni Instance / QR Kod Oluştur'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogoutInstance}
+            disabled={loggingOut || !isConnected}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ShieldCheck className="w-4 h-4 text-rose-400" />
+            <span>{loggingOut ? 'Oturum Kapatılıyor...' : 'Oturumu Kapat / Bağlantıyı Kes (Logout)'}</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -225,7 +340,9 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Instance Adı</label>
+            <label className="block text-xs font-semibold text-gray-400 mb-1">
+              Instance Adı <span className="text-[10px] text-emerald-400 font-normal">(İstediğiniz gibi değiştirebilirsiniz)</span>
+            </label>
             <input
               type="text"
               value={evoForm.instanceName}
@@ -283,6 +400,85 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
+
+      {/* QR Code Modal Popup */}
+      {qrModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#111b21] border border-gray-700 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">WhatsApp QR Bağlantısı</h3>
+              </div>
+              <button
+                onClick={() => setQrModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl inline-block shadow-inner mx-auto my-2 min-h-[220px] min-w-[220px] flex items-center justify-center">
+              {loadingQr ? (
+                <div className="flex flex-col items-center gap-2 text-gray-600">
+                  <RefreshCw className="w-8 h-8 animate-spin text-emerald-600" />
+                  <span className="text-xs font-semibold">QR Kod Üretiliyor...</span>
+                </div>
+              ) : qrCodeData ? (
+                <img
+                  src={qrCodeData}
+                  alt="WhatsApp QR Code"
+                  className="w-52 h-52 object-contain"
+                />
+              ) : isConnected ? (
+                <div className="flex flex-col items-center gap-2 text-emerald-600 p-4">
+                  <CheckCircle className="w-12 h-12 text-emerald-500" />
+                  <span className="text-xs font-bold">Oturum Başarıyla Bağlandı!</span>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 p-4">
+                  QR Kod alınamadı veya oturum zaten bağlı.
+                </div>
+              )}
+            </div>
+
+            {pairingCode && (
+              <div className="p-2.5 rounded-xl bg-gray-800/80 border border-gray-700 text-xs">
+                <span className="text-gray-400 block text-[10px]">Eşleşme Kodu (Pairing Code):</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm tracking-wider">{pairingCode}</span>
+              </div>
+            )}
+
+            <div className="text-left bg-gray-800/40 p-3 rounded-xl border border-gray-800 text-[11px] text-gray-400 space-y-1">
+              <p className="font-semibold text-gray-300">Nasıl Bağlanılır?</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-gray-400">
+                <li>Telefonunuzda WhatsApp&apos;ı açın.</li>
+                <li>Menü (üç nokta) &gt; <strong className="text-white">Bağlı Cihazlar</strong> seçin.</li>
+                <li><strong className="text-white">Cihaz Bağla</strong> butonuna basıp bu QR kodu taratın.</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleFetchQRCode}
+                disabled={loadingQr}
+                className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingQr ? 'animate-spin' : ''}`} />
+                <span>Yenile</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Anti-Ban & Rate Limit Card */}
       <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 space-y-4">

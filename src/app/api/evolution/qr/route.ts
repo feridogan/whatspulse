@@ -3,7 +3,20 @@ import { EvolutionService } from '@/lib/evolution';
 
 export async function GET(req: NextRequest) {
   try {
-    const result = await EvolutionService.getQRCode();
+    const { searchParams } = new URL(req.url);
+    const instance = searchParams.get('instance') || undefined;
+    const result = await EvolutionService.getQRCode(instance);
+    return NextResponse.json(result);
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const instance = body.instance || body.instanceName || undefined;
+    const result = await EvolutionService.createInstance(instance);
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
