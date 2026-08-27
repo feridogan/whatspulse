@@ -5,9 +5,9 @@ RUN apk add --no-cache libc6-compat openssl
 
 # Dependencies stage
 FROM base AS deps
-COPY package.json package-lock.json* ./
+COPY package.json ./
 COPY prisma ./prisma/
-RUN npm ci || npm install
+RUN npm install
 
 # Build stage
 FROM base AS builder

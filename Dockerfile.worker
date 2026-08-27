@@ -4,9 +4,9 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 
 # Dependencies
-COPY package.json package-lock.json* ./
+COPY package.json ./
 COPY prisma ./prisma/
-RUN npm ci || npm install
+RUN npm install
 RUN npx prisma generate
 
 COPY tsconfig.json ./
