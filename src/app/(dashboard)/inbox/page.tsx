@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
   MessageSquare, 
@@ -19,9 +19,9 @@ import {
   User
 } from 'lucide-react';
 
-export default function InboxPage() {
+function InboxContent() {
   const searchParams = useSearchParams();
-  const initialPhone = searchParams.get('phone') || '';
+  const initialPhone = searchParams?.get('phone') || '';
 
   const [chats, setChats] = useState<any[]>([]);
   const [activePhone, setActivePhone] = useState<string>(initialPhone);
@@ -438,5 +438,13 @@ export default function InboxPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-400">Yükleniyor...</div>}>
+      <InboxContent />
+    </Suspense>
   );
 }
