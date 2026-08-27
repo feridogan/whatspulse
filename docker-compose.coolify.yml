@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secure_password_2026@postgres:5432/whatspulse_db?schema=public}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@postgres:5432/whatspulse?schema=public}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - JWT_SECRET=${JWT_SECRET:-whatspulse-super-jwt-secret-cakirlar-2026}
       - APP_URL=${APP_URL:-https://mesaj.cakirlar.net}
@@ -45,7 +45,7 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secure_password_2026@postgres:5432/whatspulse_db?schema=public}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@postgres:5432/whatspulse?schema=public}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://10.0.201.201:3800}
       - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-sedat2}
@@ -65,12 +65,12 @@ services:
     restart: always
     environment:
       POSTGRES_USER: whatspulse
-      POSTGRES_PASSWORD: whatspulse_secure_password_2026
-      POSTGRES_DB: whatspulse_db
+      POSTGRES_PASSWORD: whatspulse_secret_2026
+      POSTGRES_DB: whatspulse
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U whatspulse -d whatspulse_db"]
+      test: ["CMD-SHELL", "pg_isready -U whatspulse -d whatspulse"]
       interval: 5s
       timeout: 5s
       retries: 10
