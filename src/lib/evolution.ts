@@ -13,7 +13,7 @@ export async function getEvolutionConfig(): Promise<EvolutionConfig> {
   let apiUrl = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
   let instanceName = process.env.EVOLUTION_INSTANCE || 'sedat2';
   let instanceKey = process.env.EVOLUTION_API_KEY || 'CC3C74FD6208-4756-87F3-133CFA796603';
-  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
 
   try {
     const setting = await prisma.setting.findUnique({
@@ -30,23 +30,32 @@ export async function getEvolutionConfig(): Promise<EvolutionConfig> {
     // Database might not be ready yet during early boot
   }
 
+  // Ensure globalApiKey is never empty, fallback to env or global default
+  if (!globalApiKey || globalApiKey === 'undefined') {
+    globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+  }
+
   // Clean trailing slash
   apiUrl = apiUrl.replace(/\/$/, '');
 
   return { apiUrl, instanceName, instanceKey, globalApiKey };
 }
 
-async function getClient(): Promise<{ client: AxiosInstance; instance: string }> {
+async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string }> {
   const config = await getEvolutionConfig();
+  const targetInstance = customInstance?.trim() || config.instanceName;
+  // Evolution API v2: apikey header must be globalApiKey (with fallback to instanceKey)
+  const apiKey = config.globalApiKey || config.instanceKey || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+
   const client = axios.create({
     baseURL: config.apiUrl,
     headers: {
-      'apikey': config.instanceKey || config.globalApiKey,
+      'apikey': apiKey,
       'Content-Type': 'application/json',
     },
     timeout: 30000,
   });
-  return { client, instance: config.instanceName };
+  return { client, instance: targetInstance };
 }
 
 function extractQRCode(data: any): string | null {
@@ -74,17 +83,8 @@ export class EvolutionService {
    */
   static async getConnectionState(customName?: string) {
     try {
-      const config = await getEvolutionConfig();
-      const instanceName = customName?.trim() || config.instanceName;
-      const client = axios.create({
-        baseURL: config.apiUrl,
-        headers: {
-          'apikey': config.instanceKey || config.globalApiKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      });
-      const res = await client.get(`/instance/connectionState/${instanceName}`);
+      const { client, instance } = await getClient(customName);
+      const res = await client.get(`/instance/connectionState/${instance}`);
       return {
         success: true,
         state: res.data?.instance?.state || res.data?.state || 'unknown',
@@ -94,7 +94,27 @@ export class EvolutionService {
       return {
         success: false,
         state: 'DISCONNECTED',
-        error: error.response?.data || error.message,
+        error: error.response?.data?.message || error.message,
+      };
+    }
+  }
+
+  /**
+   * Fetch all instances from Evolution API
+   */
+  static async fetchInstances() {
+    try {
+      const { client } = await getClient();
+      const res = await client.get('/instance/fetchInstances');
+      return {
+        success: true,
+        instances: Array.isArray(res.data) ? res.data : [],
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message,
+        instances: [],
       };
     }
   }
@@ -104,18 +124,7 @@ export class EvolutionService {
    */
   static async createInstance(customName?: string) {
     try {
-      const config = await getEvolutionConfig();
-      const instanceName = customName?.trim() || config.instanceName;
-      const globalKey = config.globalApiKey || config.instanceKey || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
-      
-      const client = axios.create({
-        baseURL: config.apiUrl,
-        headers: {
-          'apikey': globalKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      });
+      const { client, instance } = await getClient(customName);
 
       let qrCodeString: string | null = null;
       let pairingCodeString: string | null = null;
@@ -125,7 +134,7 @@ export class EvolutionService {
       // 1. First, attempt to create the instance
       try {
         const payload: any = {
-          instanceName: instanceName,
+          instanceName: instance,
           qrcode: true,
           integration: 'WHATSAPP-BAILEYS',
         };
@@ -149,7 +158,7 @@ export class EvolutionService {
           createErrMsg.includes('in use')
         ) {
           try {
-            const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instanceName)}`);
+            const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
             responseData = connectRes.data;
             qrCodeString = extractQRCode(connectRes.data);
             pairingCodeString = connectRes.data?.pairingCode || connectRes.data?.qrcode?.pairingCode || null;
@@ -169,7 +178,7 @@ export class EvolutionService {
       // 2. If instance was created or connected but QR was not immediately in the body, try connect once
       if (!qrCodeString && instanceState !== 'open') {
         try {
-          const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instanceName)}`);
+          const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
           qrCodeString = extractQRCode(connectRes.data);
           pairingCodeString = connectRes.data?.pairingCode || pairingCodeString;
           instanceState = connectRes.data?.instance?.state || connectRes.data?.state || instanceState;
@@ -178,7 +187,7 @@ export class EvolutionService {
 
       return {
         success: true,
-        instance: instanceName,
+        instance: instance,
         qrcode: qrCodeString,
         pairingCode: pairingCodeString,
         state: instanceState,
@@ -207,20 +216,11 @@ export class EvolutionService {
    */
   static async logoutInstance(customName?: string) {
     try {
-      const config = await getEvolutionConfig();
-      const instanceName = customName?.trim() || config.instanceName;
-      const client = axios.create({
-        baseURL: config.apiUrl,
-        headers: {
-          'apikey': config.globalApiKey || config.instanceKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      });
+      const { client, instance } = await getClient(customName);
 
       // Try logout first
       try {
-        const res = await client.delete(`/instance/logout/${instanceName}`);
+        const res = await client.delete(`/instance/logout/${instance}`);
         return {
           success: true,
           message: 'Oturum başarıyla kapatıldı',
@@ -228,7 +228,7 @@ export class EvolutionService {
         };
       } catch (logoutErr: any) {
         // If logout fails, try deleting instance
-        const delRes = await client.delete(`/instance/delete/${instanceName}`);
+        const delRes = await client.delete(`/instance/delete/${instance}`);
         return {
           success: true,
           message: 'Instance sıfırlandı ve bağlantı kesildi',
