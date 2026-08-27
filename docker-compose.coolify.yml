@@ -10,8 +10,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@postgres:5432/whatspulse?schema=public}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@wp_db:5432/whatspulse?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://wp_redis:6379}
       - JWT_SECRET=${JWT_SECRET:-whatspulse-super-jwt-secret-cakirlar-2026}
       - APP_URL=${APP_URL:-https://mesaj.cakirlar.net}
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://10.0.201.201:3800}
@@ -21,9 +21,9 @@ services:
     expose:
       - '3000'
     depends_on:
-      postgres:
+      wp_db:
         condition: service_healthy
-      redis:
+      wp_redis:
         condition: service_healthy
     networks:
       - whatspulse-network
@@ -45,21 +45,21 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@postgres:5432/whatspulse?schema=public}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@wp_db:5432/whatspulse?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://wp_redis:6379}
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://10.0.201.201:3800}
       - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-sedat2}
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-CC3C74FD6208-4756-87F3-133CFA796603}
       - EVOLUTION_GLOBAL_KEY=${EVOLUTION_GLOBAL_KEY:-16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824}
     depends_on:
-      postgres:
+      wp_db:
         condition: service_healthy
-      redis:
+      wp_redis:
         condition: service_healthy
     networks:
       - whatspulse-network
 
-  postgres:
+  wp_db:
     image: postgres:16-alpine
     container_name: whatspulse_postgres
     restart: always
@@ -77,7 +77,7 @@ services:
     networks:
       - whatspulse-network
 
-  redis:
+  wp_redis:
     image: redis:7-alpine
     container_name: whatspulse_redis
     restart: always
