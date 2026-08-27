@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: whatspulse_app
     restart: always
     environment:
       - NODE_ENV=production
@@ -17,6 +18,8 @@ services:
       - EVOLUTION_INSTANCE=sedat2
       - EVOLUTION_API_KEY=CC3C74FD6208-4756-87F3-133CFA796603
       - EVOLUTION_GLOBAL_KEY=16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824
+    expose:
+      - '3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -24,11 +27,12 @@ services:
         condition: service_healthy
     networks:
       - whatspulse-network
+      - coolify
     labels:
-      - "coolify.managed=true"
       - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
       - "traefik.http.routers.whatspulse.rule=Host(`mesaj.cakirlar.net`)"
-      - "traefik.http.routers.whatspulse.entrypoints=https"
+      - "traefik.http.routers.whatspulse.entrypoints=https,websecure,http,web"
       - "traefik.http.routers.whatspulse.tls=true"
       - "traefik.http.routers.whatspulse.tls.certresolver=letsencrypt"
       - "traefik.http.services.whatspulse.loadbalancer.server.port=3000"
@@ -37,6 +41,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    container_name: whatspulse_worker
     restart: always
     environment:
       - NODE_ENV=production
@@ -56,6 +61,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: whatspulse_postgres
     restart: always
     environment:
       POSTGRES_USER: whatspulse
@@ -73,6 +79,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: whatspulse_redis
     restart: always
     command: redis-server --appendonly yes
     volumes:
@@ -92,3 +99,5 @@ volumes:
 networks:
   whatspulse-network:
     driver: bridge
+  coolify:
+    external: true
