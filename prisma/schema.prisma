@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum CampaignStatus {
+  DRAFT
+  QUEUED
+  PROCESSING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum MessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ChatSender {
+  INCOMING
+  OUTGOING
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Contact {
+  id            String         @id @default(cuid())
+  name          String
+  phone         String         @unique
+  email         String?
+  notes         String?
+  isBlacklisted Boolean        @default(false)
+  customFields  Json?          @default("{}")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  groups        ContactGroup[]
+  messages      Message[]
+
+  @@index([phone])
+}
+
+model Group {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  description String?
+  color       String?        @default("#10b981")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  contacts    ContactGroup[]
+}
+
+model ContactGroup {
+  contactId  String
+  groupId    String
+  assignedAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, groupId])
+}
+
+model Template {
+  id        String     @id @default(cuid())
+  name      String
+  content   String
+  mediaType String? // text, image, document, audio, video
+  mediaUrl  String?
+  variables Json?      @default("[]")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  campaigns Campaign[]
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  title       String
+  templateId  String?
+  template    Template?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  status      CampaignStatus @default(DRAFT)
+  totalCount  Int            @default(0)
+  sentCount   Int            @default(0)
+  failedCount Int            @default(0)
+  minDelay    Int            @default(8) // Minimum humanized delay (seconds)
+  maxDelay    Int            @default(20) // Maximum humanized delay (seconds)
+  batchSize   Int            @default(25) // Batch pause after N messages
+  batchPause  Int            @default(60) // Pause duration between batches (seconds)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  messages    Message[]
+}
+
+model Message {
+  id                 String        @id @default(cuid())
+  campaignId         String?
+  campaign           Campaign?     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId          String?
+  contact            Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  phone              String
+  content            String
+  mediaUrl           String?
+  mediaType          String?
+  status             MessageStatus @default(QUEUED)
+  evolutionMessageId String?
+  errorMessage       String?
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  readAt             DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([phone])
+  @@index([status])
+  @@index([campaignId])
+}
+
+model Chat {
+  id              String        @id @default(cuid())
+  phone           String        @unique // Remote JID or E.164 number
+  contactName     String?
+  lastMessage     String?
+  lastMessageTime DateTime?     @default(now())
+  unreadCount     Int           @default(0)
+  isGroup         Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  messages        ChatMessage[]
+
+  @@index([phone])
+}
+
+model ChatMessage {
+  id                 String        @id @default(cuid())
+  chatId             String
+  chat               Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender             ChatSender    @default(OUTGOING)
+  content            String
+  mediaUrl           String?
+  mediaType          String? // text, image, document, audio, video
+  status             MessageStatus @default(SENT)
+  evolutionMessageId String?
+  timestamp          DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+
+  @@index([chatId])
+}
+
+model Blacklist {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  reason    String?  @default("Kullanıcı talebi (Opt-Out)")
+  addedBy   String?  @default("Auto-Keyword")
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
