@@ -3,16 +3,19 @@ import { EvolutionService, getEvolutionConfig } from '@/lib/evolution';
 
 export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const instance = searchParams.get('instance') || undefined;
     const config = await getEvolutionConfig();
-    const result = await EvolutionService.getConnectionState();
+    const targetInstance = instance || config.instanceName;
+    const result = await EvolutionService.getConnectionState(targetInstance);
 
     return NextResponse.json({
       success: result.success,
       state: result.state,
+      instance: targetInstance,
       config: {
         apiUrl: config.apiUrl,
-        instanceName: config.instanceName,
-        // Mask keys for security
+        instanceName: targetInstance,
         hasInstanceKey: !!config.instanceKey,
         hasGlobalApiKey: !!config.globalApiKey,
       },

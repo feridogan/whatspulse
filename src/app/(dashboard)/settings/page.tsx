@@ -43,13 +43,18 @@ export default function SettingsPage() {
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [loadingQr, setLoadingQr] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [activeQrInstance, setActiveQrInstance] = useState<string>('');
+  const [modalMode, setModalMode] = useState<'loading' | 'qr' | 'connected' | 'error'>('loading');
+  const [modalError, setModalError] = useState<string>('');
 
   const loadSettings = async () => {
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();
 
+      let currentInst = evoForm.instanceName;
       if (data.evolution_api) {
+        currentInst = data.evolution_api.instanceName || currentInst;
         setEvoForm((prev) => ({
           ...prev,
           ...data.evolution_api,
@@ -68,16 +73,19 @@ export default function SettingsPage() {
         });
       }
 
-      checkEvolutionStatus();
+      checkEvolutionStatus(currentInst);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const checkEvolutionStatus = async () => {
+  const checkEvolutionStatus = async (inst?: string) => {
+    const targetInst = (inst || evoForm.instanceName || '').trim();
+    if (!targetInst) return 'DISCONNECTED';
+
     try {
       setTestingConnection(true);
-      const res = await fetch('/api/evolution/status');
+      const res = await fetch(`/api/evolution/status?instance=${encodeURIComponent(targetInst)}`);
       const data = await res.json();
       const st = data.state || (data.success ? 'CONNECTED' : 'DISCONNECTED');
       setConnectionState(st);
@@ -91,39 +99,66 @@ export default function SettingsPage() {
   };
 
   const handleFetchQRCode = async () => {
+    const currentInstance = (evoForm.instanceName || '').trim();
+    if (!currentInstance) {
+      setStatusMsg({ type: 'error', text: 'Lütfen geçerli bir Instance Adı girin.' });
+      return;
+    }
+
     try {
       setLoadingQr(true);
       setQrModalOpen(true);
+      setModalMode('loading');
+      setQrCodeData(null);
+      setPairingCode(null);
+      setModalError('');
+      setActiveQrInstance(currentInstance);
       setStatusMsg(null);
 
-      // Call POST to create/connect instance
+      // Call POST to create/connect instance with exact instanceName
       const res = await fetch('/api/evolution/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: evoForm.instanceName }),
+        body: JSON.stringify({ instanceName: currentInstance }),
       });
       const data = await res.json();
 
       if (data.qrcode) {
-        setQrCodeData(data.qrcode.startsWith('data:') ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
-      } else {
-        setQrCodeData(null);
-      }
-      setPairingCode(data.pairingCode || null);
-
-      if (data.state === 'open' || data.state === 'CONNECTED') {
+        const raw = String(data.qrcode);
+        const formatted = raw.startsWith('data:') 
+          ? raw 
+          : raw.startsWith('http') 
+          ? raw 
+          : `data:image/png;base64,${raw}`;
+        setQrCodeData(formatted);
+        setModalMode('qr');
+      } else if (data.state === 'open' || data.state === 'CONNECTED') {
         setConnectionState('open');
-        setStatusMsg({ type: 'success', text: 'WhatsApp oturumu zaten aktif ve bağlı!' });
+        setModalMode('connected');
+      } else {
+        setModalMode('error');
+        setModalError(data.error || 'QR Kod henüz hazır değil veya alınamadı.');
+      }
+
+      if (data.pairingCode) {
+        setPairingCode(data.pairingCode);
       }
     } catch (err: any) {
-      setStatusMsg({ type: 'error', text: 'QR Kod alınamadı: ' + err.message });
+      setModalMode('error');
+      setModalError(err.message || 'QR Kod alınamadı.');
     } finally {
       setLoadingQr(false);
     }
   };
 
   const handleLogoutInstance = async () => {
-    if (!window.confirm(`"${evoForm.instanceName}" WhatsApp oturumunu kapatmak ve bağlantıyı kesmek istediğinize emin misiniz?`)) {
+    const currentInstance = (evoForm.instanceName || '').trim();
+    if (!currentInstance) {
+      setStatusMsg({ type: 'error', text: 'Geçerli bir instance adı belirtilmedi.' });
+      return;
+    }
+
+    if (!window.confirm(`"${currentInstance}" WhatsApp oturumunu kapatmak ve bağlantıyı kesmek istediğinize emin misiniz?`)) {
       return;
     }
 
@@ -133,17 +168,18 @@ export default function SettingsPage() {
       const res = await fetch('/api/evolution/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instance: evoForm.instanceName }),
+        body: JSON.stringify({ instanceName: currentInstance }),
       });
       const data = await res.json();
 
       if (res.ok && data.success) {
         setConnectionState('close');
-        setStatusMsg({ type: 'success', text: 'WhatsApp oturumu başarıyla kapatıldı ve bağlantı kesildi.' });
+        setQrCodeData(null);
+        setStatusMsg({ type: 'success', text: `"${currentInstance}" WhatsApp oturumu başarıyla kapatıldı ve bağlantı kesildi.` });
       } else {
         setStatusMsg({ type: 'error', text: data.error || 'Oturum kapatılamadı.' });
       }
-      checkEvolutionStatus();
+      checkEvolutionStatus(currentInstance);
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
     } finally {
@@ -209,7 +245,7 @@ export default function SettingsPage() {
       });
 
       setStatusMsg({ type: 'success', text: 'Tüm ayarlar başarıyla kaydedildi!' });
-      checkEvolutionStatus();
+      checkEvolutionStatus(evoForm.instanceName);
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
     } finally {
@@ -224,18 +260,23 @@ export default function SettingsPage() {
   // Poll connection when QR modal is open
   useEffect(() => {
     let interval: any;
-    if (qrModalOpen) {
+    if (qrModalOpen && activeQrInstance) {
       interval = setInterval(async () => {
-        const st = await checkEvolutionStatus();
-        if (st === 'open' || st === 'CONNECTED') {
-          clearInterval(interval);
-        }
-      }, 4000);
+        try {
+          const res = await fetch(`/api/evolution/status?instance=${encodeURIComponent(activeQrInstance)}`);
+          const data = await res.json();
+          if (data.state === 'open' || data.state === 'CONNECTED') {
+            setConnectionState('open');
+            setModalMode('connected');
+            clearInterval(interval);
+          }
+        } catch (e) {}
+      }, 3500);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [qrModalOpen]);
+  }, [qrModalOpen, activeQrInstance]);
 
   const isConnected = connectionState === 'open' || connectionState === 'CONNECTED';
   const isConnecting = connectionState === 'connecting' || connectionState === 'SCAN_QR_CODE';
@@ -403,12 +444,14 @@ export default function SettingsPage() {
 
       {/* QR Code Modal Popup */}
       {qrModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
           <div className="bg-[#111b21] border border-gray-700 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
             <div className="flex items-center justify-between pb-2 border-b border-gray-800">
               <div className="flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">WhatsApp QR Bağlantısı</h3>
+                <h3 className="text-sm font-bold text-white">
+                  WhatsApp QR Bağlantısı <span className="text-xs text-emerald-400 font-mono">({activeQrInstance})</span>
+                </h3>
               </div>
               <button
                 onClick={() => setQrModalOpen(false)}
@@ -418,26 +461,29 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl inline-block shadow-inner mx-auto my-2 min-h-[220px] min-w-[220px] flex items-center justify-center">
-              {loadingQr ? (
-                <div className="flex flex-col items-center gap-2 text-gray-600">
-                  <RefreshCw className="w-8 h-8 animate-spin text-emerald-600" />
-                  <span className="text-xs font-semibold">QR Kod Üretiliyor...</span>
+            <div className="bg-white p-4 rounded-2xl inline-block shadow-inner mx-auto my-2 min-h-[240px] min-w-[240px] flex items-center justify-center">
+              {loadingQr || modalMode === 'loading' ? (
+                <div className="flex flex-col items-center gap-3 text-gray-700 py-6">
+                  <RefreshCw className="w-9 h-9 animate-spin text-emerald-600" />
+                  <span className="text-xs font-bold text-gray-800">QR Kod Alınıyor...</span>
+                  <span className="text-[11px] text-gray-500 font-mono">{activeQrInstance}</span>
                 </div>
-              ) : qrCodeData ? (
+              ) : modalMode === 'qr' && qrCodeData ? (
                 <img
                   src={qrCodeData}
                   alt="WhatsApp QR Code"
-                  className="w-52 h-52 object-contain"
+                  className="w-56 h-56 object-contain"
                 />
-              ) : isConnected ? (
-                <div className="flex flex-col items-center gap-2 text-emerald-600 p-4">
-                  <CheckCircle className="w-12 h-12 text-emerald-500" />
-                  <span className="text-xs font-bold">Oturum Başarıyla Bağlandı!</span>
+              ) : modalMode === 'connected' ? (
+                <div className="flex flex-col items-center gap-3 text-emerald-700 py-6">
+                  <CheckCircle className="w-14 h-14 text-emerald-500" />
+                  <span className="text-sm font-bold">WhatsApp Başarıyla Bağlandı!</span>
+                  <span className="text-xs text-gray-600 font-mono">Instance: {activeQrInstance}</span>
                 </div>
               ) : (
-                <div className="text-xs text-gray-500 p-4">
-                  QR Kod alınamadı veya oturum zaten bağlı.
+                <div className="flex flex-col items-center gap-2 text-rose-600 p-4 text-xs font-semibold">
+                  <AlertCircle className="w-8 h-8 text-rose-500" />
+                  <span>{modalError || 'QR kod üretilemedi.'}</span>
                 </div>
               )}
             </div>

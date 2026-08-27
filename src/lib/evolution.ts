@@ -53,10 +53,19 @@ export class EvolutionService {
   /**
    * Check connection status of WhatsApp Instance
    */
-  static async getConnectionState() {
+  static async getConnectionState(customName?: string) {
     try {
-      const { client, instance } = await getClient();
-      const res = await client.get(`/instance/connectionState/${instance}`);
+      const config = await getEvolutionConfig();
+      const instanceName = customName?.trim() || config.instanceName;
+      const client = axios.create({
+        baseURL: config.apiUrl,
+        headers: {
+          'apikey': config.instanceKey || config.globalApiKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      });
+      const res = await client.get(`/instance/connectionState/${instanceName}`);
       return {
         success: true,
         state: res.data?.instance?.state || res.data?.state || 'unknown',
@@ -77,7 +86,7 @@ export class EvolutionService {
   static async createInstance(customName?: string) {
     try {
       const config = await getEvolutionConfig();
-      const instanceName = customName || config.instanceName;
+      const instanceName = customName?.trim() || config.instanceName;
       const client = axios.create({
         baseURL: config.apiUrl,
         headers: {
@@ -87,38 +96,61 @@ export class EvolutionService {
         timeout: 30000,
       });
 
-      // Try creating instance
-      const payload = {
-        instanceName: instanceName,
-        token: config.instanceKey || '',
-        qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
-      };
+      let qrCodeString: string | null = null;
+      let pairingCodeString: string | null = null;
+      let instanceState = 'SCAN_QR_CODE';
+      let responseData: any = null;
 
       try {
+        // 1. Try creating instance
+        const payload = {
+          instanceName: instanceName,
+          token: config.instanceKey || '',
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+        };
+
         const res = await client.post('/instance/create', payload);
-        return {
-          success: true,
-          created: true,
-          instance: res.data?.instance?.instanceName || instanceName,
-          qrcode: res.data?.qrcode?.base64 || res.data?.base64 || res.data?.qrcode || null,
-          pairingCode: res.data?.pairingCode || null,
-          state: res.data?.instance?.state || 'SCAN_QR_CODE',
-          data: res.data,
-        };
+        responseData = res.data;
+        qrCodeString = res.data?.qrcode?.base64 || 
+                       res.data?.base64 || 
+                       (typeof res.data?.qrcode === 'string' ? res.data.qrcode : null) || 
+                       res.data?.code || null;
+        pairingCodeString = res.data?.pairingCode || null;
+        instanceState = res.data?.instance?.state || res.data?.state || 'SCAN_QR_CODE';
       } catch (createErr: any) {
-        // If instance already exists or conflict, try connecting
+        // 2. If instance already exists or error, fetch connect QR directly
         const connectRes = await client.get(`/instance/connect/${instanceName}`);
-        return {
-          success: true,
-          created: false,
-          instance: instanceName,
-          qrcode: connectRes.data?.base64 || connectRes.data?.qrcode?.base64 || connectRes.data?.qrcode || connectRes.data?.code || null,
-          pairingCode: connectRes.data?.pairingCode || null,
-          state: connectRes.data?.instance?.state || 'SCAN_QR_CODE',
-          data: connectRes.data,
-        };
+        responseData = connectRes.data;
+        qrCodeString = connectRes.data?.base64 || 
+                       connectRes.data?.qrcode?.base64 || 
+                       (typeof connectRes.data?.qrcode === 'string' ? connectRes.data.qrcode : null) || 
+                       connectRes.data?.code || null;
+        pairingCodeString = connectRes.data?.pairingCode || null;
+        instanceState = connectRes.data?.instance?.state || connectRes.data?.state || 'SCAN_QR_CODE';
       }
+
+      // 3. If QR string is still missing and not connected, try GET /instance/connect once more
+      if (!qrCodeString && instanceState !== 'open') {
+        try {
+          const connectRes = await client.get(`/instance/connect/${instanceName}`);
+          qrCodeString = connectRes.data?.base64 || 
+                         connectRes.data?.qrcode?.base64 || 
+                         (typeof connectRes.data?.qrcode === 'string' ? connectRes.data.qrcode : null) || 
+                         connectRes.data?.code || null;
+          pairingCodeString = connectRes.data?.pairingCode || pairingCodeString;
+          instanceState = connectRes.data?.instance?.state || connectRes.data?.state || instanceState;
+        } catch (e) {}
+      }
+
+      return {
+        success: true,
+        instance: instanceName,
+        qrcode: qrCodeString,
+        pairingCode: pairingCodeString,
+        state: instanceState,
+        data: responseData,
+      };
     } catch (error: any) {
       const errorMsg = error.response?.data?.response?.message || 
                        error.response?.data?.message || 
@@ -135,14 +167,28 @@ export class EvolutionService {
    */
   static async getQRCode(customName?: string) {
     try {
-      const { client, instance } = await getClient();
-      const targetInstance = customName || instance;
-      const res = await client.get(`/instance/connect/${targetInstance}`);
+      const config = await getEvolutionConfig();
+      const instanceName = customName?.trim() || config.instanceName;
+      const client = axios.create({
+        baseURL: config.apiUrl,
+        headers: {
+          'apikey': config.globalApiKey || config.instanceKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      const res = await client.get(`/instance/connect/${instanceName}`);
+      const qrCodeString = res.data?.base64 || 
+                           res.data?.qrcode?.base64 || 
+                           (typeof res.data?.qrcode === 'string' ? res.data.qrcode : null) || 
+                           res.data?.code || null;
       return {
         success: true,
-        qrcode: res.data?.base64 || res.data?.qrcode?.base64 || res.data?.qrcode || res.data?.code || null,
+        instance: instanceName,
+        qrcode: qrCodeString,
         pairingCode: res.data?.pairingCode || null,
-        state: res.data?.instance?.state || 'SCAN_QR_CODE',
+        state: res.data?.instance?.state || res.data?.state || 'SCAN_QR_CODE',
         data: res.data,
       };
     } catch (error: any) {
@@ -162,14 +208,34 @@ export class EvolutionService {
    */
   static async logoutInstance(customName?: string) {
     try {
-      const { client, instance } = await getClient();
-      const targetInstance = customName || instance;
-      const res = await client.delete(`/instance/logout/${targetInstance}`);
-      return {
-        success: true,
-        message: 'Oturum başarıyla kapatıldı',
-        data: res.data,
-      };
+      const config = await getEvolutionConfig();
+      const instanceName = customName?.trim() || config.instanceName;
+      const client = axios.create({
+        baseURL: config.apiUrl,
+        headers: {
+          'apikey': config.globalApiKey || config.instanceKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      // Try logout first
+      try {
+        const res = await client.delete(`/instance/logout/${instanceName}`);
+        return {
+          success: true,
+          message: 'Oturum başarıyla kapatıldı',
+          data: res.data,
+        };
+      } catch (logoutErr: any) {
+        // If logout fails, try deleting instance
+        const delRes = await client.delete(`/instance/delete/${instanceName}`);
+        return {
+          success: true,
+          message: 'Instance sıfırlandı ve bağlantı kesildi',
+          data: delRes.data,
+        };
+      }
     } catch (error: any) {
       const errorMsg = error.response?.data?.response?.message || 
                        error.response?.data?.message || 
