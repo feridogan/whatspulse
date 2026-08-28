@@ -77,13 +77,18 @@ async function main() {
   ];
 
   for (const s of defaultSettings) {
-    await prisma.setting.upsert({
+    const existing = await prisma.setting.findUnique({
       where: { key: s.key },
-      update: { value: s.value },
-      create: { key: s.key, value: s.value },
     });
+    if (!existing) {
+      await prisma.setting.create({
+        data: { key: s.key, value: s.value },
+      });
+      console.log(`✅ Default setting created: ${s.key}`);
+    } else {
+      console.log(`ℹ️ Setting already exists (preserving user config): ${s.key}`);
+    }
   }
-  console.log('✅ Default settings configured');
 
   // 3. Seed Default Contact Groups
   const defaultGroups = [

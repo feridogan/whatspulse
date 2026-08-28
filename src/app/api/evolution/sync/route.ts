@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
 import { normalizePhone } from '@/lib/utils';
-import { requireAdmin } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const authCheck = await requireAdmin(req);
+    const authCheck = await requireAuth(req);
     if (authCheck.error) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
     }
@@ -21,9 +21,13 @@ export async function POST(req: NextRequest) {
       if (Array.isArray(evoGroups)) {
         for (const g of evoGroups) {
           const groupName = g.subject || g.name || g.id || 'WhatsApp Grubu';
+          if (!groupName || groupName === 'status@broadcast') continue;
+
           await prisma.group.upsert({
             where: { name: groupName },
-            update: { description: `WhatsApp Grubu (JID: ${g.id || ''})` },
+            update: { 
+              description: `WhatsApp Grubu (JID: ${g.id || ''})`,
+            },
             create: {
               name: groupName,
               description: `WhatsApp Grubu (JID: ${g.id || ''})`,
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (err) {
-      console.warn('Group sync warning:', err);
+      console.warn('[Sync Groups Warning]:', err);
     }
 
     // 2. Sync Contacts
@@ -42,11 +46,19 @@ export async function POST(req: NextRequest) {
       const evoContacts = await EvolutionService.fetchContacts();
       if (Array.isArray(evoContacts)) {
         for (const c of evoContacts) {
-          const rawPhone = c.id || c.remoteJid || c.number || '';
+          const rawId = c.id || c.remoteJid || c.number || '';
+          const rawIdStr = String(rawId);
+
+          // Skip groups, status broadcast, newsletter
+          if (rawIdStr.includes('@g.us') || rawIdStr.includes('@broadcast') || rawIdStr.includes('@newsletter')) {
+            continue;
+          }
+
+          const rawPhone = rawIdStr.replace(/@.*$/, '').replace(/\D/g, '');
           const phone = normalizePhone(rawPhone);
           if (!phone || phone.length < 9) continue;
 
-          const name = c.pushName || c.name || c.verifiedName || `Kişi ${phone.slice(-4)}`;
+          const name = c.pushName || c.name || c.verifiedName || c.shortName || `Kişi ${phone.slice(-4)}`;
 
           await prisma.contact.upsert({
             where: { phone },
@@ -56,14 +68,14 @@ export async function POST(req: NextRequest) {
             create: {
               phone,
               name,
-              notes: 'Evolution API senkronizasyonu ile eklendi',
+              notes: 'WhatsApp Evolution API senkronizasyonu ile eklendi',
             },
           });
           contactsCount++;
         }
       }
     } catch (err) {
-      console.warn('Contacts sync warning:', err);
+      console.warn('[Sync Contacts Warning]:', err);
     }
 
     // 3. Sync Chats
@@ -71,12 +83,15 @@ export async function POST(req: NextRequest) {
       const evoChats = await EvolutionService.fetchChats();
       if (Array.isArray(evoChats)) {
         for (const ch of evoChats) {
-          const rawPhone = ch.id || ch.remoteJid || '';
-          const phone = normalizePhone(rawPhone) || rawPhone;
+          const rawId = String(ch.id || ch.remoteJid || '');
+          if (rawId.includes('@broadcast') || rawId.includes('@newsletter')) continue;
+
+          const isGroup = rawId.includes('@g.us');
+          const rawPhone = isGroup ? rawId : rawId.replace(/@.*$/, '').replace(/\D/g, '');
+          const phone = isGroup ? rawId : (normalizePhone(rawPhone) || rawPhone);
           if (!phone) continue;
 
-          const contactName = ch.name || ch.pushName || null;
-          const isGroup = String(rawPhone).includes('@g.us');
+          const contactName = ch.name || ch.pushName || (isGroup ? 'WhatsApp Grubu' : null);
 
           await prisma.chat.upsert({
             where: { phone },
@@ -96,12 +111,12 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (err) {
-      console.warn('Chats sync warning:', err);
+      console.warn('[Sync Chats Warning]:', err);
     }
 
     return NextResponse.json({
       success: true,
-      message: 'WhatsApp verileri başarıyla senkronize edildi!',
+      message: `${contactsCount} kişi ve ${groupsCount} grup başarıyla güncellendi.`,
       synced: {
         contacts: contactsCount,
         groups: groupsCount,

@@ -59,6 +59,39 @@ export default function ContactsPage() {
   // Native Contact Picker support check
   const [supportsNativePicker, setSupportsNativePicker] = useState(false);
 
+  // Evolution WhatsApp Sync
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSyncEvolution = async () => {
+    try {
+      setSyncing(true);
+      setSyncStatus(null);
+      const res = await fetch('/api/evolution/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSyncStatus({
+          type: 'success',
+          text: `✅ ${data.synced?.contacts || 0} kişi ve ${data.synced?.groups || 0} grup WhatsApp Evolution API'den başarıyla güncellendi.`,
+        });
+        loadContacts();
+        loadGroups();
+      } else {
+        setSyncStatus({
+          type: 'error',
+          text: data.error || 'WhatsApp senkronizasyonu tamamlanamadı.',
+        });
+      }
+    } catch (err: any) {
+      setSyncStatus({
+        type: 'error',
+        text: 'Bağlantı hatası: ' + err.message,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const loadContacts = async () => {
     try {
       setLoading(true);
@@ -237,10 +270,21 @@ export default function ContactsPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* WhatsApp Evolution Sync Button */}
+          <button
+            onClick={handleSyncEvolution}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
+            title="WhatsApp Evolution API rehber ve gruplarını senkronize et"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            <span>{syncing ? 'Senkronize Ediliyor...' : "WhatsApp'tan Kişileri & Grupları Senkronize Et"}</span>
+          </button>
+
           {/* Mobile Contact Picker Button */}
           <button
             onClick={handleNativeContactPicker}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-semibold shadow-md transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 hover:from-teal-600 hover:to-cyan-600 text-white text-xs font-semibold shadow-md transition-all"
             title="Cihaz rehberinden doğrudan kişi seçin"
           >
             <Smartphone className="w-4 h-4" />
@@ -266,6 +310,15 @@ export default function ContactsPage() {
           </button>
         </div>
       </div>
+
+      {/* Sync Status Banner */}
+      {syncStatus && (
+        <div className={`p-4 rounded-2xl text-xs font-medium border animate-fade-in ${
+          syncStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
+        }`}>
+          {syncStatus.text}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-800 pb-2">

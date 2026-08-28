@@ -202,8 +202,14 @@ export default function SettingsPage() {
         }),
       });
 
-      setStatusMsg({ type: 'success', text: 'Tüm ayarlar başarıyla kaydedildi!' });
-      checkEvolutionStatus(evoForm.instanceName);
+      const st = await checkEvolutionStatus(evoForm.instanceName);
+      if (st === 'open') {
+        // Auto-sync contacts and groups in background
+        fetch('/api/evolution/sync', { method: 'POST' }).catch(() => {});
+        setStatusMsg({ type: 'success', text: 'Tüm ayarlar kaydedildi ve WhatsApp verileri otomatik senkronize edildi!' });
+      } else {
+        setStatusMsg({ type: 'success', text: 'Tüm ayarlar başarıyla kaydedildi!' });
+      }
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
     } finally {

@@ -194,15 +194,21 @@ export class EvolutionService {
   static async fetchContacts() {
     try {
       const { client, instance } = await getClient();
-      const res = await client.post(`/chat/findContacts/${instance}`, {});
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, {});
+      if (Array.isArray(res.data)) return res.data;
+      if (Array.isArray(res.data?.contacts)) return res.data.contacts;
+      if (Array.isArray(res.data?.data)) return res.data.data;
+      return [];
     } catch (error) {
-      console.warn('Could not fetch contacts via POST, trying GET...', error);
       try {
         const { client, instance } = await getClient();
-        const res = await client.get(`/chat/findContacts/${instance}`);
-        return Array.isArray(res.data) ? res.data : [];
+        const res = await client.get(`/chat/findContacts/${encodeURIComponent(instance)}`);
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data?.contacts)) return res.data.contacts;
+        if (Array.isArray(res.data?.data)) return res.data.data;
+        return [];
       } catch (err) {
+        console.warn('[Evolution API fetchContacts]: Could not fetch contacts', err);
         return [];
       }
     }
@@ -214,9 +220,13 @@ export class EvolutionService {
   static async fetchGroups() {
     try {
       const { client, instance } = await getClient();
-      const res = await client.get(`/group/fetchAllGroups/${instance}?getParticipants=false`);
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}?getParticipants=false`);
+      if (Array.isArray(res.data)) return res.data;
+      if (Array.isArray(res.data?.groups)) return res.data.groups;
+      if (Array.isArray(res.data?.data)) return res.data.data;
+      return [];
     } catch (error) {
+      console.warn('[Evolution API fetchGroups]: Could not fetch groups', error);
       return [];
     }
   }
@@ -227,10 +237,22 @@ export class EvolutionService {
   static async fetchChats() {
     try {
       const { client, instance } = await getClient();
-      const res = await client.post(`/chat/findChats/${instance}`, {});
-      return Array.isArray(res.data) ? res.data : [];
-    } catch (error) {
+      const res = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, {});
+      if (Array.isArray(res.data)) return res.data;
+      if (Array.isArray(res.data?.chats)) return res.data.chats;
+      if (Array.isArray(res.data?.data)) return res.data.data;
       return [];
+    } catch (error) {
+      try {
+        const { client, instance } = await getClient();
+        const res = await client.get(`/chat/findChats/${encodeURIComponent(instance)}`);
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data?.chats)) return res.data.chats;
+        if (Array.isArray(res.data?.data)) return res.data.data;
+        return [];
+      } catch (err) {
+        return [];
+      }
     }
   }
 
