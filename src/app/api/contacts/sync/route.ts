@@ -71,9 +71,20 @@ export async function POST() {
     const rawChats = chatsRes.status === 'fulfilled' && Array.isArray(chatsRes.value.data) ? chatsRes.value.data : [];
     const rawGroups = groupsRes.status === 'fulfilled' && Array.isArray(groupsRes.value.data) ? groupsRes.value.data : [];
 
-    console.log("Evolution'dan gelen ham kişi sayısı:", rawContacts.length);
-    console.log("Evolution'dan gelen sohbet sayısı:", rawChats.length);
-    console.log("Evolution'dan gelen grup sayısı:", rawGroups.length);
+    // DEBUG LOGLARI
+    console.log("=== EVOLUTION API DEBUG LOGS ===");
+    console.log("Contacts Request Status:", contactsRes.status, contactsRes.status === 'rejected' ? (contactsRes as any).reason?.message : 'OK');
+    console.log("Chats Request Status:", chatsRes.status, chatsRes.status === 'rejected' ? (chatsRes as any).reason?.message : 'OK');
+    console.log("Groups Request Status:", groupsRes.status, groupsRes.status === 'rejected' ? (groupsRes as any).reason?.message : 'OK');
+
+    console.log("Gelen Toplam Kişi Array Uzunluğu:", rawContacts.length);
+    console.log("Gelen Toplam Sohbet Array Uzunluğu:", rawChats.length);
+    console.log("Gelen Toplam Grup Array Uzunluğu:", rawGroups.length);
+
+    console.log("DEBUG CONTACTS SAMPLE:", JSON.stringify(rawContacts.slice(0, 3), null, 2));
+    console.log("DEBUG CHATS SAMPLE:", JSON.stringify(rawChats.slice(0, 3), null, 2));
+    console.log("DEBUG GROUPS SAMPLE:", JSON.stringify(rawGroups.slice(0, 3), null, 2));
+    console.log("================================");
 
     // 3. Grupları Kaydet
     const cleanGroups: { name: string; description: string; color: string }[] = [];
@@ -164,6 +175,13 @@ export async function POST() {
       totalGroups: cleanGroups.length,
       contactsCount: cleanContacts.length,
       groupsCount: cleanGroups.length,
+      debug: {
+        rawContactsCount: rawContacts.length,
+        rawChatsCount: rawChats.length,
+        rawGroupsCount: rawGroups.length,
+        sampleContacts: rawContacts.slice(0, 3),
+        sampleGroups: rawGroups.slice(0, 3),
+      },
       message: `Senkronizasyon Başarılı: ${cleanContacts.length.toLocaleString('tr-TR')} Kişi ve ${cleanGroups.length} Grup yüklendi.`
     });
 
