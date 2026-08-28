@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Users, 
   UserPlus, 
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function ContactsPage() {
+  const router = useRouter();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>('');
@@ -84,6 +86,7 @@ export default function ContactsPage() {
           setTotal(count);
         }
         await Promise.all([loadContacts(), loadGroups()]);
+        router.refresh();
       } else {
         setSyncStatus({
           type: 'error',

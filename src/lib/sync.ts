@@ -10,34 +10,38 @@ export interface SyncResult {
 
 export async function executeWhatsAppSync(): Promise<SyncResult> {
   try {
-    // 1. Sıfırlama (Reset)
+    // 1. Sıfırlama (Tam Temizleme)
     await prisma.contactGroup.deleteMany({});
     await prisma.contact.deleteMany({});
     await prisma.group.deleteMany({});
     console.log("Mevcut kişi ve gruplar başarıyla sıfırlandı.");
 
-    // 2. Evolution API'den Veri Toplama (Kişi ve Grup Ayrımı)
-    const [groupsResult, contactsResult, chatsResult] = await Promise.allSettled([
-      EvolutionService.fetchGroups(),
+    // 2. Evolution API'den Veri Toplama (Paralel İstekler)
+    const [contactsResult, chatsResult, groupsResult] = await Promise.allSettled([
       EvolutionService.fetchContacts(),
       EvolutionService.fetchChats(),
+      EvolutionService.fetchGroups(),
     ]);
 
-    const evoGroups = groupsResult.status === 'fulfilled' && Array.isArray(groupsResult.value) 
-      ? groupsResult.value 
-      : [];
     const evoContacts = contactsResult.status === 'fulfilled' && Array.isArray(contactsResult.value) 
       ? contactsResult.value 
       : [];
     const evoChats = chatsResult.status === 'fulfilled' && Array.isArray(chatsResult.value) 
       ? chatsResult.value 
       : [];
+    const evoGroups = groupsResult.status === 'fulfilled' && Array.isArray(groupsResult.value) 
+      ? groupsResult.value 
+      : [];
 
-    // GRUPLAR İÇİN:
+    console.log("Evolution'dan gelen ham kişi sayısı:", evoContacts.length);
+    console.log("Evolution'dan gelen sohbet sayısı:", evoChats.length);
+    console.log("Evolution'dan gelen grup sayısı:", evoGroups.length);
+
+    // 3. GRUPLARI ÇEKME VE KAYDETME
     const groupMap = new Map<string, { name: string; description: string; color: string }>();
 
     for (const group of evoGroups) {
-      const groupName = (group.subject || group.name || 'İsimsiz Grup').trim();
+      const groupName = (group.subject || group.name || 'WhatsApp Grubu').trim();
       if (!groupName || groupName === 'status@broadcast') continue;
 
       const size = group.size || (Array.isArray(group.participants) ? group.participants.length : 0);
@@ -54,6 +58,22 @@ export async function executeWhatsAppSync(): Promise<SyncResult> {
       }
     }
 
+    // Ayrıca sohbetler içindeki @g.us gruplarını topla
+    for (const ch of evoChats) {
+      const rawJid = String(ch.id || ch.remoteJid || '');
+      if (rawJid.includes('@g.us')) {
+        const groupName = (ch.name || ch.subject || 'WhatsApp Grubu').trim();
+        const normalizedKey = groupName.toLowerCase();
+        if (groupName && !groupMap.has(normalizedKey)) {
+          groupMap.set(normalizedKey, {
+            name: groupName,
+            description: `WhatsApp Grubu - JID: ${rawJid}`,
+            color: '#128C7E',
+          });
+        }
+      }
+    }
+
     const cleanGroups = Array.from(groupMap.values());
 
     if (cleanGroups.length > 0) {
@@ -63,68 +83,53 @@ export async function executeWhatsAppSync(): Promise<SyncResult> {
       });
     }
 
-    // KİŞİLER İÇİN:
-    const contactMap = new Map<string, { phone: string; name: string; isRealName: boolean }>();
+    // 4. KİŞİLERİ ÇEKME VE İSMİ/NUMARAYI DOĞRU FORMATLAMA
+    const contactMap = new Map<string, { phone: string; name: string }>();
 
-    function processContactItem(item: any) {
+    function processContact(item: any) {
       if (!item) return;
-      const rawId = String(item.id || item.remoteJid || item.jid || item.number || '').trim();
+      const rawJid = String(item.id || item.remoteJid || item.jid || item.number || '').trim();
 
-      // SADECE @s.whatsapp.net ile biten veya grup olmayan kayıtları işle
-      // (@g.us, @broadcast, status@broadcast, @newsletter içerenleri kesinlikle KİŞİ OLARAK EKLEME)
+      // @g.us, @broadcast, @newsletter içerenleri KİŞİ LİSTESİNE ALMA
       if (
-        !rawId ||
-        rawId.includes('@g.us') ||
-        rawId.includes('@broadcast') ||
-        rawId.includes('@newsletter') ||
-        rawId.includes('@lid') ||
-        rawId.startsWith('status@')
+        !rawJid ||
+        rawJid.includes('@g.us') ||
+        rawJid.includes('@broadcast') ||
+        rawJid.includes('@newsletter') ||
+        rawJid.includes('@lid') ||
+        rawJid.startsWith('status@')
       ) {
         return;
       }
 
-      // Telefon Numarası Temizleme:
-      const phoneOnly = rawId
-        .replace(/@.*$/, '')
-        .replace(/:.*$/, '')
-        .replace(/\D/g, '');
-
-      // Eğer phoneOnly 10 haneden kısaysa veya geçersizse bu kaydı atla
-      if (phoneOnly.length < 10) {
+      // Numara Ayıklama
+      const cleanNumber = rawJid.split('@')[0].replace(/\D/g, '');
+      if (cleanNumber.length < 8) {
         return;
       }
 
-      // Numarayı + ile başlat
-      const phone = `+${phoneOnly}`;
+      const phone = `+${cleanNumber}`;
 
-      // İsim Ayrıştırma:
-      const fullName = String(
-        item.pushName || 
-        item.name || 
-        item.verifiedName || 
-        item.notify || 
-        item.shortName || 
-        item.formattedName || 
-        ''
-      ).trim();
-
-      const hasRealName = !!fullName && fullName !== phone && fullName !== phoneOnly && fullName !== `+${phoneOnly}`;
-      const name = hasRealName ? fullName : phone;
+      // İsim Ayıklama
+      const rawName = item.pushName || item.name || item.verifiedName || item.notify || item.shortName || '';
+      const cleanName = typeof rawName === 'string' ? rawName.trim() : '';
+      const isRealName = cleanName.length > 0 && cleanName !== cleanNumber && cleanName !== phone && cleanName.replace(/\D/g, '') !== cleanNumber;
+      const contactName = isRealName ? cleanName : phone;
 
       const existing = contactMap.get(phone);
       if (!existing) {
-        contactMap.set(phone, { phone, name, isRealName: hasRealName });
-      } else if (!existing.isRealName && hasRealName) {
-        contactMap.set(phone, { phone, name, isRealName: true });
+        contactMap.set(phone, { phone, name: contactName });
+      } else if (existing.name === phone && isRealName) {
+        contactMap.set(phone, { phone, name: contactName });
       }
     }
 
-    // Hem contacts hem chats listesini birleştir
+    // Hem contacts hem chats listesini işle
     for (const c of evoContacts) {
-      processContactItem(c);
+      processContact(c);
     }
     for (const ch of evoChats) {
-      processContactItem(ch);
+      processContact(ch);
     }
 
     const cleanContacts = Array.from(contactMap.values()).map((c) => ({
@@ -133,7 +138,7 @@ export async function executeWhatsAppSync(): Promise<SyncResult> {
       notes: 'WhatsApp Evolution API senkronizasyonu ile eklendi',
     }));
 
-    // 3. Mükerrer Kontrolü ve Toplu Kayıt (Bulk Insert - 500'erli bloklar)
+    // Toplu Kayıt (Prisma Bulk Insert)
     const CHUNK_SIZE = 500;
     for (let i = 0; i < cleanContacts.length; i += CHUNK_SIZE) {
       const chunk = cleanContacts.slice(i, i + CHUNK_SIZE);
@@ -143,7 +148,6 @@ export async function executeWhatsAppSync(): Promise<SyncResult> {
       });
     }
 
-    // 4. Loglama ve Geri Bildirim
     console.log("Çekilen Grup Sayısı:", cleanGroups.length);
     console.log("Çekilen Kişi Sayısı:", cleanContacts.length);
 
