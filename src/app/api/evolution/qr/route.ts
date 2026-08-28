@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { EvolutionService } from '@/lib/evolution';
+import { requireAdmin } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const authCheck = await requireAdmin(req);
+    if (authCheck.error) {
+      return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
+    }
+
     const { searchParams } = new URL(req.url);
     const instance = searchParams.get('instance') || undefined;
     const result = await EvolutionService.createInstance(instance);
@@ -14,6 +20,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authCheck = await requireAdmin(req);
+    if (authCheck.error) {
+      return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
+    }
+
     const body = await req.json().catch(() => ({}));
     const instance = body.instanceName || body.instance || undefined;
     const result = await EvolutionService.createInstance(instance);

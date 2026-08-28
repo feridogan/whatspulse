@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
+import { requireAdmin } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const authCheck = await requireAdmin(req);
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     const settings = await prisma.setting.findMany();
     const settingsMap: Record<string, any> = {};
 
@@ -19,6 +25,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const authCheck = await requireAdmin(req);
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     const body = await req.json();
     const { key, value, action } = body;
 

@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
 import { normalizePhone } from '@/lib/utils';
+import { requireAdmin } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
+    const authCheck = await requireAdmin(req);
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     let contactsCount = 0;
     let groupsCount = 0;
     let chatsCount = 0;

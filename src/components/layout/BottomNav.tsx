@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { 
   LayoutDashboard, 
   MessageSquare, 
@@ -10,20 +11,26 @@ import {
   Send, 
   FileText, 
   Settings,
-  ShieldBan
+  ShieldAlert
 } from 'lucide-react';
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { isAdmin } = useAuth();
 
-  const navItems = [
+  const baseItems = [
     { href: '/', label: 'Pano', icon: LayoutDashboard },
     { href: '/inbox', label: 'Sohbet', icon: MessageSquare },
     { href: '/contacts', label: 'Rehber', icon: Users },
-    { href: '/campaigns', label: 'Toplu Gönder', icon: Send },
-    { href: '/templates', label: 'Şablonlar', icon: FileText },
-    { href: '/settings', label: 'Ayarlar', icon: Settings },
+    { href: '/campaigns', label: 'Gönderim', icon: Send },
+    { href: '/templates', label: 'Şablon', icon: FileText },
   ];
+
+  const trailingItem = isAdmin
+    ? { href: '/settings', label: 'Ayarlar', icon: Settings }
+    : { href: '/blacklist', label: 'Kara Liste', icon: ShieldAlert };
+
+  const navItems = [...baseItems, trailingItem];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#111b21]/95 backdrop-blur-lg border-t border-gray-800 md:hidden pb-safe">

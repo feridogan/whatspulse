@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Wifi, 
   WifiOff, 
@@ -12,12 +13,14 @@ import {
   CheckCircle2, 
   AlertCircle,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  User
 } from 'lucide-react';
 
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user, isAdmin, logout } = useAuth();
   const [status, setStatus] = useState<'open' | 'connecting' | 'close' | 'DISCONNECTED' | 'unknown'>('unknown');
   const [loading, setLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -52,13 +55,7 @@ export function Header() {
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/login');
-      router.refresh();
-    } catch (err) {
-      console.error(err);
-    }
+    await logout();
   };
 
   useEffect(() => {

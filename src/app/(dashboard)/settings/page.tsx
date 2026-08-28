@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Settings, 
   Save, 
@@ -16,6 +18,9 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { isAdmin, loading: authLoading } = useAuth();
+
   const [evoForm, setEvoForm] = useState({
     apiUrl: 'http://10.0.201.201:3800',
     instanceName: 'sedat2',
@@ -23,6 +28,13 @@ export default function SettingsPage() {
     globalApiKey: '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824',
     webhookUrl: 'https://mesaj.cakirlar.net/api/webhook/evolution',
   });
+
+  // Redirect non-admins to dashboard
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.push('/');
+    }
+  }, [authLoading, isAdmin, router]);
 
   const [antibanForm, setAntibanForm] = useState({
     minDelay: 8,

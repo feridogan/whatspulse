@@ -20,11 +20,34 @@ async function main() {
         name: 'Sistem Yöneticisi',
         password: hashedPassword,
         role: Role.ADMIN,
+        isActive: true,
       },
     });
     console.log(`✅ Admin user created: ${admin.email} (Password: Admin123!)`);
   } else {
     console.log(`ℹ️ Admin user already exists: ${existingAdmin.email}`);
+  }
+
+  // 1.1 Seed Standard User
+  const userEmail = 'user@whatspulse.com';
+  const existingUser = await prisma.user.findUnique({
+    where: { email: userEmail },
+  });
+
+  if (!existingUser) {
+    const hashedPassword = await bcrypt.hash('User123!', 10);
+    const user = await prisma.user.create({
+      data: {
+        email: userEmail,
+        name: 'Standart Kullanıcı',
+        password: hashedPassword,
+        role: Role.USER,
+        isActive: true,
+      },
+    });
+    console.log(`✅ Standard user created: ${user.email} (Password: User123!)`);
+  } else {
+    console.log(`ℹ️ Standard user already exists: ${existingUser.email}`);
   }
 
   // 2. Seed Default Settings (Evolution API & Anti-Ban)

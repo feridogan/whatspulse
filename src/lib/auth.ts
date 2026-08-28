@@ -10,8 +10,9 @@ const TOKEN_NAME = 'whatspulse_token';
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: string;
+  role: 'ADMIN' | 'USER';
   name: string;
+  isActive?: boolean;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -45,8 +46,10 @@ export async function getSessionUser() {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, name: true, role: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true },
     });
+
+    if (!user || user.isActive === false) return null;
 
     return user;
   } catch {
@@ -67,8 +70,31 @@ export async function authenticateRequest(req: NextRequest) {
   const payload = verifyToken(token);
   if (!payload?.userId) return null;
 
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, isActive: true },
   });
+
+  if (!user || user.isActive === false) return null;
+
+  return user;
+}
+
+export async function requireAuth(req: NextRequest) {
+  const user = await authenticateRequest(req);
+  if (!user) {
+    return { error: 'Oturum açmanız gerekmektedir.', status: 401 as const, user: null };
+  }
+  return { error: null, status: 200 as const, user };
+}
+
+export async function requireAdmin(req: NextRequest) {
+  const user = await authenticateRequest(req);
+  if (!user) {
+    return { error: 'Oturum açmanız gerekmektedir.', status: 401 as const, user: null };
+  }
+  if (user.role !== 'ADMIN') {
+    return { error: 'Bu işlem için ADMIN yetkisi gerekmektedir.', status: 403 as const, user: null };
+  }
+  return { error: null, status: 200 as const, user };
 }

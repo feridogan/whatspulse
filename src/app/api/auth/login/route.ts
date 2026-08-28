@@ -23,11 +23,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Geçersiz e-posta veya şifre.' }, { status: 401 });
     }
 
+    if (user.isActive === false) {
+      return NextResponse.json({ error: 'Hesabınız askıya alınmıştır veya pasif durumdadır. Lütfen sistem yöneticisi ile iletişime geçin.' }, { status: 403 });
+    }
+
     const tokenPayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      isActive: user.isActive,
     };
 
     const token = signToken(tokenPayload);
@@ -39,6 +44,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         name: user.name,
         role: user.role,
+        isActive: user.isActive,
       },
       token,
     });
