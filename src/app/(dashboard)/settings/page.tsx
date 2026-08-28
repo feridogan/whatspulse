@@ -13,7 +13,9 @@ import {
   CheckCircle, 
   AlertCircle,
   ExternalLink,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -27,6 +29,9 @@ export default function SettingsPage() {
     globalApiKey: '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f',
     webhookUrl: 'https://mesaj.cakirlar.net/api/webhook/evolution',
   });
+
+  const [showInstanceKey, setShowInstanceKey] = useState(false);
+  const [showGlobalKey, setShowGlobalKey] = useState(false);
 
   const [antibanForm, setAntibanForm] = useState({
     minDelay: 8,
@@ -91,9 +96,12 @@ export default function SettingsPage() {
       const res = await fetch(`/api/evolution/status?instance=${encodeURIComponent(targetInst)}`);
       const data = await res.json();
       const rawState = data.state || (data.success ? 'open' : 'close');
-      const isOpen = rawState.toLowerCase() === 'open' || rawState.toLowerCase() === 'connected';
-      setConnectionState(isOpen ? 'open' : rawState);
-      return isOpen ? 'open' : rawState;
+      const isOpen = data.isOpen || (typeof rawState === 'string' && (rawState.toLowerCase() === 'open' || rawState.toLowerCase() === 'connected'));
+      const isConnecting = typeof rawState === 'string' && (rawState.toLowerCase() === 'connecting' || rawState.toLowerCase() === 'scan_qr_code');
+      
+      const normalizedState = isOpen ? 'open' : isConnecting ? 'connecting' : (rawState || 'close');
+      setConnectionState(normalizedState);
+      return normalizedState;
     } catch (err) {
       setConnectionState('close');
       return 'close';
@@ -208,6 +216,7 @@ export default function SettingsPage() {
   }, []);
 
   const isConnected = connectionState.toLowerCase() === 'open' || connectionState.toLowerCase() === 'connected';
+  const isConnecting = connectionState.toLowerCase() === 'connecting' || connectionState.toLowerCase() === 'scan_qr_code';
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -255,9 +264,11 @@ export default function SettingsPage() {
             <span className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
               isConnected
                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                : isConnecting
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
             }`}>
-              Durum: {isConnected ? 'Bağlı / Open' : `Bağlantı Yok / ${connectionState}`}
+              Durum: {isConnected ? 'Bağlı / Open' : isConnecting ? 'Bağlanıyor...' : `Bağlantı Yok / ${connectionState}`}
             </span>
 
             <button
@@ -305,26 +316,48 @@ export default function SettingsPage() {
             />
           </div>
 
+          {/* Instance API Key with Toggle */}
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1">Instance API Key</label>
-            <input
-              type="password"
-              value={evoForm.instanceKey}
-              onChange={(e) => setEvoForm({ ...evoForm, instanceKey: e.target.value })}
-              placeholder="11E1F8329577-40D3-B891-9CCA41C01658"
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
+            <div className="relative">
+              <input
+                type={showInstanceKey ? 'text' : 'password'}
+                value={evoForm.instanceKey}
+                onChange={(e) => setEvoForm({ ...evoForm, instanceKey: e.target.value })}
+                placeholder="11E1F8329577-40D3-B891-9CCA41C01658"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowInstanceKey(!showInstanceKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                title={showInstanceKey ? 'Gizle' : 'Göster'}
+              >
+                {showInstanceKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
+          {/* Global API Key with Toggle */}
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1">Global API Key *</label>
-            <input
-              type="password"
-              value={evoForm.globalApiKey}
-              onChange={(e) => setEvoForm({ ...evoForm, globalApiKey: e.target.value })}
-              placeholder="4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f"
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
+            <div className="relative">
+              <input
+                type={showGlobalKey ? 'text' : 'password'}
+                value={evoForm.globalApiKey}
+                onChange={(e) => setEvoForm({ ...evoForm, globalApiKey: e.target.value })}
+                placeholder="4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGlobalKey(!showGlobalKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                title={showGlobalKey ? 'Gizle' : 'Göster'}
+              >
+                {showGlobalKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
 

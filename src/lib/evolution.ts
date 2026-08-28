@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import https from 'https';
 import prisma from './prisma';
 import { normalizePhone } from './utils';
 
@@ -41,6 +42,11 @@ export async function getEvolutionConfig(): Promise<EvolutionConfig> {
   return { apiUrl, instanceName, instanceKey, globalApiKey };
 }
 
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+});
+
 async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string }> {
   const config = await getEvolutionConfig();
   const targetInstance = customInstance?.trim() || config.instanceName;
@@ -52,8 +58,10 @@ async function getClient(customInstance?: string): Promise<{ client: AxiosInstan
     headers: {
       'apikey': apiKey,
       'Content-Type': 'application/json',
+      'User-Agent': 'WhatsPulse/1.0.0 (Evolution API Client)',
     },
-    timeout: 30000,
+    httpsAgent,
+    timeout: 8000,
   });
   return { client, instance: targetInstance };
 }
@@ -65,22 +73,28 @@ export class EvolutionService {
   static async getConnectionState(customName?: string) {
     try {
       const { client, instance } = await getClient(customName);
-      const res = await client.get(`/instance/connectionState/${instance}`);
+      const res = await client.get(`/instance/connectionState/${encodeURIComponent(instance)}`);
       const rawState = res.data?.instance?.state || res.data?.state || 'unknown';
-      const isOpen = rawState.toLowerCase() === 'open' || rawState.toLowerCase() === 'connected';
+      const isOpen = typeof rawState === 'string' && (rawState.toLowerCase() === 'open' || rawState.toLowerCase() === 'connected');
+      const isConnecting = typeof rawState === 'string' && (rawState.toLowerCase() === 'connecting' || rawState.toLowerCase() === 'scan_qr_code');
 
       return {
         success: true,
-        state: isOpen ? 'open' : rawState,
+        state: isOpen ? 'open' : isConnecting ? 'connecting' : rawState,
         isOpen,
         data: res.data,
       };
     } catch (error: any) {
+      const errMsg = error.response?.data?.response?.message || 
+                     error.response?.data?.message || 
+                     (typeof error.response?.data === 'string' ? error.response.data : null) || 
+                     error.message;
+      console.warn('[Evolution API Connection Warning]:', errMsg);
       return {
         success: false,
         state: 'close',
         isOpen: false,
-        error: error.response?.data?.message || error.message,
+        error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg,
       };
     }
   }

@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: result.success,
       state: result.state,
+      isOpen: result.isOpen,
+      error: result.error || null,
       instance: targetInstance,
       config: {
         apiUrl: config.apiUrl,
@@ -28,9 +30,11 @@ export async function GET(req: NextRequest) {
       raw: result.data,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, state: 'DISCONNECTED', error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      state: 'close',
+      isOpen: false,
+      error: error.message,
+    });
   }
 }
