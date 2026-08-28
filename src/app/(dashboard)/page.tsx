@@ -146,7 +146,7 @@ export default function DashboardPage() {
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
               Sistem Aktif
             </span>
-            <span className="text-xs text-gray-400">sedat2 Instance</span>
+            <span className="text-xs text-gray-400">Evolution API v2</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">WhatsPulse Yönetim Paneli</h1>
           <p className="text-xs sm:text-sm text-gray-400">

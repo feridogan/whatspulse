@@ -10,10 +10,10 @@ export interface EvolutionConfig {
 }
 
 export async function getEvolutionConfig(): Promise<EvolutionConfig> {
-  let apiUrl = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
-  let instanceName = process.env.EVOLUTION_INSTANCE || 'sedat2';
-  let instanceKey = process.env.EVOLUTION_API_KEY || 'CC3C74FD6208-4756-87F3-133CFA796603';
-  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+  let apiUrl = process.env.EVOLUTION_API_URL || 'https://evo-rc.cakirlar.net';
+  let instanceName = process.env.EVOLUTION_INSTANCE || 'feridun';
+  let instanceKey = process.env.EVOLUTION_API_KEY || '11E1F8329577-40D3-B891-9CCA41C01658';
+  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f';
 
   try {
     const setting = await prisma.setting.findUnique({
@@ -32,7 +32,7 @@ export async function getEvolutionConfig(): Promise<EvolutionConfig> {
 
   // Ensure globalApiKey is never empty, fallback to env or global default
   if (!globalApiKey || globalApiKey === 'undefined') {
-    globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+    globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f';
   }
 
   // Clean trailing slash
@@ -44,8 +44,8 @@ export async function getEvolutionConfig(): Promise<EvolutionConfig> {
 async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string }> {
   const config = await getEvolutionConfig();
   const targetInstance = customInstance?.trim() || config.instanceName;
-  // Evolution API v2: apikey header must be globalApiKey (with fallback to instanceKey)
-  const apiKey = config.globalApiKey || config.instanceKey || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824';
+  // Evolution API v2: apikey header uses globalApiKey or instanceKey
+  const apiKey = config.globalApiKey || config.instanceKey || '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f';
 
   const client = axios.create({
     baseURL: config.apiUrl,
@@ -58,25 +58,6 @@ async function getClient(customInstance?: string): Promise<{ client: AxiosInstan
   return { client, instance: targetInstance };
 }
 
-function extractQRCode(data: any): string | null {
-  if (!data) return null;
-  if (typeof data === 'string') {
-    if (data.startsWith('data:image') || data.startsWith('iVBORw0KGgo') || data.length > 80) {
-      return data;
-    }
-  }
-  if (data.qrcode) {
-    if (typeof data.qrcode === 'string') return data.qrcode;
-    if (typeof data.qrcode === 'object') {
-      if (typeof data.qrcode.base64 === 'string') return data.qrcode.base64;
-      if (typeof data.qrcode.code === 'string') return data.qrcode.code;
-    }
-  }
-  if (typeof data.base64 === 'string') return data.base64;
-  if (typeof data.code === 'string' && data.code.length > 50) return data.code;
-  return null;
-}
-
 export class EvolutionService {
   /**
    * Check connection status of WhatsApp Instance
@@ -85,15 +66,20 @@ export class EvolutionService {
     try {
       const { client, instance } = await getClient(customName);
       const res = await client.get(`/instance/connectionState/${instance}`);
+      const rawState = res.data?.instance?.state || res.data?.state || 'unknown';
+      const isOpen = rawState.toLowerCase() === 'open' || rawState.toLowerCase() === 'connected';
+
       return {
         success: true,
-        state: res.data?.instance?.state || res.data?.state || 'unknown',
+        state: isOpen ? 'open' : rawState,
+        isOpen,
         data: res.data,
       };
     } catch (error: any) {
       return {
         success: false,
-        state: 'DISCONNECTED',
+        state: 'close',
+        isOpen: false,
         error: error.response?.data?.message || error.message,
       };
     }
@@ -120,121 +106,17 @@ export class EvolutionService {
   }
 
   /**
-   * Create a new WhatsApp Instance or connect to existing one
-   */
-  static async createInstance(customName?: string) {
-    try {
-      const { client, instance } = await getClient(customName);
-
-      let qrCodeString: string | null = null;
-      let pairingCodeString: string | null = null;
-      let instanceState = 'SCAN_QR_CODE';
-      let responseData: any = null;
-
-      // 1. First, attempt to create the instance
-      try {
-        const payload: any = {
-          instanceName: instance,
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-        };
-
-        const res = await client.post('/instance/create', payload);
-        responseData = res.data;
-        qrCodeString = extractQRCode(res.data);
-        pairingCodeString = res.data?.pairingCode || res.data?.qrcode?.pairingCode || null;
-        instanceState = res.data?.instance?.state || res.data?.state || 'SCAN_QR_CODE';
-      } catch (createErr: any) {
-        const createErrData = createErr.response?.data;
-        const createErrMsg = JSON.stringify(createErrData || createErr.message || '').toLowerCase();
-        
-        // If instance already exists, fetch connect QR directly
-        if (
-          createErr.response?.status === 400 || 
-          createErr.response?.status === 403 || 
-          createErr.response?.status === 409 ||
-          createErrMsg.includes('already') ||
-          createErrMsg.includes('exists') ||
-          createErrMsg.includes('in use')
-        ) {
-          try {
-            const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
-            responseData = connectRes.data;
-            qrCodeString = extractQRCode(connectRes.data);
-            pairingCodeString = connectRes.data?.pairingCode || connectRes.data?.qrcode?.pairingCode || null;
-            instanceState = connectRes.data?.instance?.state || connectRes.data?.state || 'SCAN_QR_CODE';
-          } catch (connectErr: any) {
-            // If connect failed, re-throw with clear message
-            throw new Error(connectErr.response?.data?.message || connectErr.message || 'Instance bağlanamadı');
-          }
-        } else {
-          const errMsg = createErr.response?.data?.response?.message || 
-                         createErr.response?.data?.message || 
-                         createErr.message;
-          throw new Error(Array.isArray(errMsg) ? errMsg.join(', ') : errMsg);
-        }
-      }
-
-      // 2. If instance was created or connected but QR was not immediately in the body, try connect once
-      if (!qrCodeString && instanceState !== 'open') {
-        try {
-          const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
-          qrCodeString = extractQRCode(connectRes.data);
-          pairingCodeString = connectRes.data?.pairingCode || pairingCodeString;
-          instanceState = connectRes.data?.instance?.state || connectRes.data?.state || instanceState;
-        } catch (e) {}
-      }
-
-      return {
-        success: true,
-        instance: instance,
-        qrcode: qrCodeString,
-        pairingCode: pairingCodeString,
-        state: instanceState,
-        data: responseData,
-      };
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.response?.message || 
-                       error.response?.data?.message || 
-                       error.message;
-      return {
-        success: false,
-        error: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
-      };
-    }
-  }
-
-  /**
-   * Fetch QR code for WhatsApp Web connection (creates if missing)
-   */
-  static async getQRCode(customName?: string) {
-    return this.createInstance(customName);
-  }
-
-  /**
    * Logout / Disconnect WhatsApp instance
    */
   static async logoutInstance(customName?: string) {
     try {
       const { client, instance } = await getClient(customName);
-
-      // Try logout first
-      try {
-        const res = await client.delete(`/instance/logout/${instance}`);
-        return {
-          success: true,
-          message: 'Oturum başarıyla kapatıldı',
-          data: res.data,
-        };
-      } catch (logoutErr: any) {
-        // If logout fails, try deleting instance
-        const delRes = await client.delete(`/instance/delete/${instance}`);
-        return {
-          success: true,
-          message: 'Instance sıfırlandı ve bağlantı kesildi',
-          data: delRes.data,
-        };
-      }
+      const res = await client.delete(`/instance/logout/${instance}`);
+      return {
+        success: true,
+        message: 'Oturum kapatma isteği gönderildi',
+        data: res.data,
+      };
     } catch (error: any) {
       const errorMsg = error.response?.data?.response?.message || 
                        error.response?.data?.message || 

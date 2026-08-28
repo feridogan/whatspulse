@@ -14,10 +14,10 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://wp_redis:6379}
       - JWT_SECRET=${JWT_SECRET:-whatspulse-super-jwt-secret-cakirlar-2026}
       - APP_URL=${APP_URL:-https://mesaj.cakirlar.net}
-      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://10.0.201.201:3800}
-      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-sedat2}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-CC3C74FD6208-4756-87F3-133CFA796603}
-      - EVOLUTION_GLOBAL_KEY=${EVOLUTION_GLOBAL_KEY:-16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-https://evo-rc.cakirlar.net}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-feridun}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-11E1F8329577-40D3-B891-9CCA41C01658}
+      - EVOLUTION_GLOBAL_KEY=${EVOLUTION_GLOBAL_KEY:-4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f}
     expose:
       - '3000'
     depends_on:
@@ -47,10 +47,10 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://whatspulse:whatspulse_secret_2026@wp_db:5432/whatspulse?schema=public}
       - REDIS_URL=${REDIS_URL:-redis://wp_redis:6379}
-      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://10.0.201.201:3800}
-      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-sedat2}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-CC3C74FD6208-4756-87F3-133CFA796603}
-      - EVOLUTION_GLOBAL_KEY=${EVOLUTION_GLOBAL_KEY:-16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-https://evo-rc.cakirlar.net}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-feridun}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-11E1F8329577-40D3-B891-9CCA41C01658}
+      - EVOLUTION_GLOBAL_KEY=${EVOLUTION_GLOBAL_KEY:-4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f}
     depends_on:
       wp_db:
         condition: service_healthy
