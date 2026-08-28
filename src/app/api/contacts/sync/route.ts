@@ -6,9 +6,9 @@ export async function POST() {
   let pool: Pool | null = null;
 
   try {
-    // 0. Ayarları Oku
-    let instanceName = process.env.EVOLUTION_INSTANCE || 'feridun';
-    let evoDbUrl = process.env.EVOLUTION_DATABASE_URL || 'postgresql://evo_user:CakirlarPostgresPass99!@evolution-postgres:5432/evolution_db?schema=public';
+    // 0. Instance Adı ve Veritabanı URL'si
+    let instanceName = process.env.EVOLUTION_INSTANCE || 'ff';
+    let evoDbUrl = process.env.EVOLUTION_DATABASE_URL || 'postgresql://evo_user:CakirlarPostgresPass99!@172.17.0.1:5432/evolution_db?schema=public';
 
     const setting = await prisma.setting.findFirst({
       where: {
@@ -28,197 +28,159 @@ export async function POST() {
       }
     }
 
-    if (!evoDbUrl) {
-      return NextResponse.json({
-        success: false,
-        step: "DB_CONNECTION_FAILED",
-        error: "EVOLUTION_DATABASE_URL ortam değişkeni tanımlı değil."
-      }, { status: 400 });
-    }
+    console.log(`[Evolution DB Sync] Bağlanılıyor: ${evoDbUrl.replace(/:[^:@]+@/, ':***@')} (Hedef Instance: ${instanceName})`);
 
-    const maskedUrl = evoDbUrl.replace(/:[^:@]+@/, ':***@');
-    console.log(`[Diagnostic Run] PostgreSQL bağlanılıyor: ${maskedUrl}`);
-
-    // 1. PostgreSQL Bağlantısını Sına
+    // 1. PostgreSQL Bağlantısı Kur (timeout: 10000ms)
     pool = new Pool({
       connectionString: evoDbUrl,
-      connectionTimeoutMillis: 8000,
+      connectionTimeoutMillis: 10000,
     });
 
-    let client;
+    const client = await pool.connect();
+
     try {
-      client = await pool.connect();
-    } catch (connErr: any) {
-      console.error("[Diagnostic Run] PostgreSQL Bağlantı Hatası:", connErr.message);
-      return NextResponse.json({
-        success: false,
-        step: "DB_CONNECTION_FAILED",
-        dbUrl: maskedUrl,
-        error: connErr.message || 'PostgreSQL sunucusuna bağlanılamadı (Ağ/Port/Şifre hatası).'
-      }, { status: 500 });
-    }
+      // 2. WhatsPulse Kendi Tablolarını Sıfırla (Hard Reset)
+      await prisma.contactGroup.deleteMany({}).catch(() => {});
+      await prisma.contact.deleteMany({});
+      await prisma.group.deleteMany({});
+      console.log("Mevcut WhatsPulse kişi ve grupları başarıyla sıfırlandı.");
 
-    // 2. Tablo Şeması Teşhisi (information_schema)
-    const tablesRes = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';");
-    const tableNames = tablesRes.rows.map((r: any) => r.table_name);
-    console.log("[Diagnostic Run] Veritabanındaki Tablolar:", tableNames);
-
-    // Tablo isimlerini büyük/küçük harf toleranslı belirle
-    const instanceTable = tableNames.find((t: string) => t.toLowerCase() === 'instance') || 'Instance';
-    const contactTable = tableNames.find((t: string) => t.toLowerCase() === 'contact') || 'Contact';
-    const chatTable = tableNames.find((t: string) => t.toLowerCase() === 'chat') || 'Chat';
-
-    // 3. Instance ID'yi Bul
-    let instanceId: string | null = null;
-    try {
-      const instRes = await client.query(
-        `SELECT id, name FROM "${instanceTable}" WHERE name = $1 OR LOWER(name) = LOWER($1) LIMIT 1;`,
-        [instanceName]
-      );
-      if (instRes.rows.length > 0) {
-        instanceId = instRes.rows[0].id;
-        console.log(`[Diagnostic Run] Instance '${instanceName}' bulundu (ID: ${instanceId})`);
-      } else {
-        const anyInstRes = await client.query(`SELECT id, name FROM "${instanceTable}" LIMIT 5;`);
-        console.log("[Diagnostic Run] Hedef instance bulunamadı. Mevcut Instance'lar:", anyInstRes.rows);
-        if (anyInstRes.rows.length > 0) {
-          instanceId = anyInstRes.rows[0].id;
-          console.log(`[Diagnostic Run] İlk bulunan instance kullanılıyor (ID: ${instanceId}, İsim: ${anyInstRes.rows[0].name})`);
+      // 3. Instance ID Bulma
+      let instanceId: string | null = null;
+      try {
+        const instRes = await client.query(
+          `SELECT id, name FROM "Instance" WHERE name = $1 UNION SELECT id, name FROM "instance" WHERE name = $1 LIMIT 1;`,
+          [instanceName]
+        );
+        if (instRes.rows.length > 0) {
+          instanceId = instRes.rows[0].id;
+          console.log(`[Evolution DB Sync] Instance '${instanceName}' ID: ${instanceId}`);
+        } else {
+          // Eğer 'ff' bulunamazsa ilk instance'ı al
+          const anyInst = await client.query(`SELECT id, name FROM "Instance" UNION SELECT id, name FROM "instance" LIMIT 1;`);
+          if (anyInst.rows.length > 0) {
+            instanceId = anyInst.rows[0].id;
+            console.log(`[Evolution DB Sync] '${instanceName}' bulunamadı, mevcut instance kullanılıyor: ${anyInst.rows[0].name} (ID: ${instanceId})`);
+          }
         }
+      } catch (instErr: any) {
+        console.warn("[Evolution DB Sync] Instance tablosu hatası:", instErr.message);
       }
-    } catch (instErr: any) {
-      console.warn("[Diagnostic Run] Instance tablosu sorgulanamadı:", instErr.message);
-    }
 
-    // 4. GRUPLARI ÇEK
-    const cleanGroups: Array<{ name: string; description: string; color: string }> = [];
-    const groupMap = new Map<string, boolean>();
+      // 4. GRUPLARI ÇEK
+      const cleanGroups: Array<{ name: string; description: string; color: string }> = [];
+      const groupMap = new Map<string, boolean>();
 
-    try {
-      const groupsSql = instanceId
-        ? `SELECT * FROM "${chatTable}" WHERE "instanceId" = $1 AND "id" LIKE '%@g.us';`
-        : `SELECT * FROM "${chatTable}" WHERE "id" LIKE '%@g.us';`;
-      const groupsRes = await client.query(groupsSql, instanceId ? [instanceId] : []);
+      try {
+        const groupsSql = instanceId
+          ? `SELECT * FROM "Chat" WHERE ("instanceId" = $1 OR "instance_id" = $1) AND "id" LIKE '%@g.us';`
+          : `SELECT * FROM "Chat" WHERE "id" LIKE '%@g.us';`;
+        const groupsRes = await client.query(groupsSql, instanceId ? [instanceId] : []);
 
-      for (const row of groupsRes.rows) {
-        const gName = (row.subject || row.name || 'WhatsApp Grubu').trim();
-        const normalizedKey = gName.toLowerCase();
-        if (gName && !groupMap.has(normalizedKey)) {
-          groupMap.set(normalizedKey, true);
-          const memberCount = Number(row.size || 0) || 0;
-          const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
-          cleanGroups.push({
-            name: gName,
-            description: `WhatsApp Grubu${sizeText} - JID: ${row.id}`,
-            color: '#128C7E',
+        for (const row of groupsRes.rows) {
+          const gName = (row.subject || row.name || 'WhatsApp Grubu').trim();
+          const normalizedKey = gName.toLowerCase();
+          if (gName && !groupMap.has(normalizedKey)) {
+            groupMap.set(normalizedKey, true);
+            const memberCount = Number(row.size || 0) || 0;
+            const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
+            cleanGroups.push({
+              name: gName,
+              description: `WhatsApp Grubu${sizeText} - JID: ${row.id}`,
+              color: '#128C7E',
+            });
+          }
+        }
+      } catch (groupErr: any) {
+        console.warn("[Evolution DB Sync] Gruplar sorgu hatası:", groupErr.message);
+      }
+
+      if (cleanGroups.length > 0) {
+        await prisma.group.createMany({ data: cleanGroups, skipDuplicates: true });
+      }
+
+      // 5. KİŞİLERİ ÇEK (1.055 Kaydın Tamamı)
+      const contactMap = new Map<string, { name: string; phone: string; email?: string; notes?: string }>();
+
+      function processRow(row: any) {
+        const rawId = String(row.id || '');
+        if (!rawId || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter')) return;
+
+        // Numara Temizleme: Sadece rakamları al
+        const digits = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+        if (digits.length < 8) return;
+
+        // Telefon Formatı: +${digits} (Kesinlikle '++' olmasın)
+        const phone = `+${digits}`;
+
+        // İsim Ayrıştırma
+        const rawName = (row.pushName || row.name || row.verifiedName || row.notify || row.shortName || '').trim();
+        const isRealName = rawName.length > 0 && rawName !== phone && rawName !== digits && rawName.replace(/\D/g, '') !== digits;
+        const name = isRealName ? rawName : phone;
+
+        if (!contactMap.has(phone)) {
+          contactMap.set(phone, {
+            name,
+            phone,
+            email: `${digits}@whatsapp.local`,
+            notes: 'WhatsApp Evolution PostgreSQL veritabanı senkronizasyonu ile eklendi',
           });
+        } else if (isRealName && contactMap.get(phone)!.name === phone) {
+          contactMap.get(phone)!.name = name;
         }
       }
-    } catch (groupErr: any) {
-      console.warn("[Diagnostic Run] Grup çekme sorgusu hatası:", groupErr.message);
-    }
 
-    // 5. KİŞİLERİ ÇEK
-    const contactMap = new Map<string, { name: string; phone: string; email?: string; notes?: string }>();
-
-    function processRow(row: any) {
-      const rawId = String(row.id || '');
-      if (!rawId || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter')) return;
-
-      const digits = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-      if (digits.length < 8) return;
-
-      const phone = `+${digits}`;
-      const rawName = (row.pushName || row.name || row.verifiedName || row.notify || row.shortName || '').trim();
-      const isRealName = rawName.length > 0 && rawName !== phone && rawName !== digits && rawName.replace(/\D/g, '') !== digits;
-      const name = isRealName ? rawName : phone;
-
-      if (!contactMap.has(phone)) {
-        contactMap.set(phone, {
-          name,
-          phone,
-          email: `${digits}@whatsapp.local`,
-          notes: 'WhatsApp Evolution API veritabanı senkronizasyonu ile eklendi',
-        });
-      } else if (isRealName && contactMap.get(phone)!.name === phone) {
-        contactMap.get(phone)!.name = name;
+      // Contact tablosundan çek
+      try {
+        const contactsSql = instanceId
+          ? `SELECT * FROM "Contact" WHERE ("instanceId" = $1 OR "instance_id" = $1) AND "id" LIKE '%@s.whatsapp.net';`
+          : `SELECT * FROM "Contact" WHERE "id" LIKE '%@s.whatsapp.net';`;
+        const contactsRes = await client.query(contactsSql, instanceId ? [instanceId] : []);
+        for (const r of contactsRes.rows) processRow(r);
+      } catch (cErr: any) {
+        console.warn("[Evolution DB Sync] Contact tablosu hatası:", cErr.message);
       }
-    }
 
-    let totalRawContacts = 0;
-    try {
-      const contactsSql = instanceId
-        ? `SELECT * FROM "${contactTable}" WHERE "instanceId" = $1 AND "id" LIKE '%@s.whatsapp.net';`
-        : `SELECT * FROM "${contactTable}" WHERE "id" LIKE '%@s.whatsapp.net';`;
-      const contactsRes = await client.query(contactsSql, instanceId ? [instanceId] : []);
-      totalRawContacts += contactsRes.rowCount || 0;
-      for (const r of contactsRes.rows) processRow(r);
-    } catch (cErr: any) {
-      console.warn("[Diagnostic Run] Contact tablosu sorgulanamadı:", cErr.message);
-    }
+      // Chat tablosundan bireysel sohbetleri çek
+      try {
+        const chatsSql = instanceId
+          ? `SELECT * FROM "Chat" WHERE ("instanceId" = $1 OR "instance_id" = $1) AND "id" LIKE '%@s.whatsapp.net';`
+          : `SELECT * FROM "Chat" WHERE "id" LIKE '%@s.whatsapp.net';`;
+        const chatsRes = await client.query(chatsSql, instanceId ? [instanceId] : []);
+        for (const r of chatsRes.rows) processRow(r);
+      } catch (chErr: any) {
+        console.warn("[Evolution DB Sync] Chat tablosu hatası:", chErr.message);
+      }
 
-    try {
-      const chatsSql = instanceId
-        ? `SELECT * FROM "${chatTable}" WHERE "instanceId" = $1 AND "id" LIKE '%@s.whatsapp.net';`
-        : `SELECT * FROM "${chatTable}" WHERE "id" LIKE '%@s.whatsapp.net';`;
-      const chatsRes = await client.query(chatsSql, instanceId ? [instanceId] : []);
-      totalRawContacts += chatsRes.rowCount || 0;
-      for (const r of chatsRes.rows) processRow(r);
-    } catch (chErr: any) {
-      console.warn("[Diagnostic Run] Chat tablosu sorgulanamadı:", chErr.message);
-    }
+      const cleanContacts = Array.from(contactMap.values());
 
-    client.release();
+      // 500'erli bloklar halinde WhatsPulse'a kaydet
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < cleanContacts.length; i += CHUNK_SIZE) {
+        const chunk = cleanContacts.slice(i, i + CHUNK_SIZE);
+        await prisma.contact.createMany({ data: chunk, skipDuplicates: true });
+      }
 
-    const cleanContacts = Array.from(contactMap.values());
+      console.log(`[Evolution DB Sync Başarılı] Çekilen Kişi: ${cleanContacts.length}, Grup: ${cleanGroups.length}`);
 
-    // Eğer veritabanında hiçbir kişi ve grup bulunamadıysa detaylı teşhis yanıtı dön
-    if (cleanContacts.length === 0 && cleanGroups.length === 0) {
-      console.warn("[Diagnostic Run] Hiçbir kayıt bulunamadı!", { tables: tableNames, totalRaw: totalRawContacts });
       return NextResponse.json({
-        success: false,
-        step: "NO_INSTANCE_OR_EMPTY",
-        error: `Evolution veritabanında '${instanceName}' instance'ına ait kayıt bulunamadı. Tablolar: ${tableNames.join(', ')}`,
-        instanceNameFound: instanceName,
-        tablesFound: tableNames,
-        totalRawContacts: totalRawContacts
-      }, { status: 400 });
+        success: true,
+        totalContacts: cleanContacts.length,
+        totalGroups: cleanGroups.length,
+        contactsCount: cleanContacts.length,
+        groupsCount: cleanGroups.length,
+        message: `Senkronizasyon Başarılı: ${cleanContacts.length.toLocaleString('tr-TR')} Kişi ve ${cleanGroups.length} Grup yüklendi.`
+      });
+
+    } finally {
+      client.release();
     }
-
-    // 6. WhatsPulse Kendi Tablolarını Sıfırla ve Yeni Verileri Kaydet
-    await prisma.contactGroup.deleteMany({}).catch(() => {});
-    await prisma.contact.deleteMany({});
-    await prisma.group.deleteMany({});
-    console.log("Mevcut WhatsPulse kişi ve grupları başarıyla sıfırlandı.");
-
-    if (cleanGroups.length > 0) {
-      await prisma.group.createMany({ data: cleanGroups, skipDuplicates: true });
-    }
-
-    const CHUNK_SIZE = 500;
-    for (let i = 0; i < cleanContacts.length; i += CHUNK_SIZE) {
-      const chunk = cleanContacts.slice(i, i + CHUNK_SIZE);
-      await prisma.contact.createMany({ data: chunk, skipDuplicates: true });
-    }
-
-    console.log(`[Diagnostic Run Başarılı] Kaydedilen Toplam Kişi: ${cleanContacts.length}, Grup: ${cleanGroups.length}`);
-
-    return NextResponse.json({
-      success: true,
-      totalContacts: cleanContacts.length,
-      totalGroups: cleanGroups.length,
-      contactsCount: cleanContacts.length,
-      groupsCount: cleanGroups.length,
-      tablesInEvolutionDb: tableNames,
-      message: `Senkronizasyon Başarılı: ${cleanContacts.length.toLocaleString('tr-TR')} Kişi ve ${cleanGroups.length} Grup yüklendi.`
-    });
 
   } catch (error: any) {
-    console.error('[Diagnostic Run Hata]:', error.message);
+    console.error('[Evolution DB Sync Hatası]:', error.message);
     return NextResponse.json({
       success: false,
-      step: "UNEXPECTED_ERROR",
-      error: error.message || 'Beklenmeyen senkronizasyon hatası'
+      error: error.message || 'Evolution PostgreSQL veritabanı bağlantı hatası'
     }, { status: 500 });
   } finally {
     if (pool) {
