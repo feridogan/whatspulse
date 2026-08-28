@@ -12,9 +12,13 @@ export async function POST(req: NextRequest) {
     const result = await executeWhatsAppSync();
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('[Contacts Sync API Error]:', error);
+    console.error('SYNC HATASI:', error.response?.data || error.message);
+    const errorDetail = error.response?.data?.message || error.response?.data || error.message;
     return NextResponse.json(
-      { error: 'Senkronizasyon hatası: ' + error.message },
+      { 
+        success: false, 
+        error: 'SYNC HATASI: ' + (typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail) 
+      },
       { status: 500 }
     );
   }
