@@ -72,10 +72,9 @@ export default function ContactsPage() {
       if (res.ok && data.success) {
         setSyncStatus({
           type: 'success',
-          text: `✅ ${data.synced?.contacts || 0} kişi ve ${data.synced?.groups || 0} grup WhatsApp Evolution API'den başarıyla güncellendi.`,
+          text: `✅ ${data.message || 'Senkronizasyon başarıyla tamamlandı!'}`,
         });
-        loadContacts();
-        loadGroups();
+        await Promise.all([loadContacts(), loadGroups()]);
       } else {
         setSyncStatus({
           type: 'error',
@@ -313,10 +312,16 @@ export default function ContactsPage() {
 
       {/* Sync Status Banner */}
       {syncStatus && (
-        <div className={`p-4 rounded-2xl text-xs font-medium border animate-fade-in ${
+        <div className={`p-4 rounded-2xl text-xs font-medium border animate-fade-in flex items-center justify-between gap-3 ${
           syncStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
         }`}>
-          {syncStatus.text}
+          <span>{syncStatus.text}</span>
+          <button
+            onClick={() => setSyncStatus(null)}
+            className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
         </div>
       )}
 

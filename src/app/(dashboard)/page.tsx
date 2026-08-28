@@ -89,7 +89,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/evolution/sync', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        setSyncMessage(`✅ Eşitleme Tamamlandı: ${data.synced?.contacts || 0} Kişi, ${data.synced?.groups || 0} Grup.`);
+        setSyncMessage(`✅ ${data.message || 'Senkronizasyon başarıyla tamamlandı!'}`);
         loadData();
       } else {
         setSyncMessage(`❌ Hata: ${data.error}`);
