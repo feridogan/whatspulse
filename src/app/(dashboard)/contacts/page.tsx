@@ -67,13 +67,19 @@ export default function ContactsPage() {
     try {
       setSyncing(true);
       setSyncStatus(null);
-      const res = await fetch('/api/evolution/sync', { method: 'POST' });
+      let res = await fetch('/api/contacts/sync', { method: 'POST' });
+      if (!res.ok && res.status === 404) {
+        res = await fetch('/api/evolution/sync', { method: 'POST' });
+      }
       const data = await res.json();
       if (res.ok && data.success) {
         setSyncStatus({
           type: 'success',
           text: `✅ ${data.message || 'Senkronizasyon başarıyla tamamlandı!'}`,
         });
+        if (typeof data.synced?.totalContacts === 'number') {
+          setTotal(data.synced.totalContacts);
+        }
         await Promise.all([loadContacts(), loadGroups()]);
       } else {
         setSyncStatus({

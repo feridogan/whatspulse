@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     const result = await executeWhatsAppSync();
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('[Evolution Sync API Error]:', error);
+    console.error('[Contacts Sync API Error]:', error);
     return NextResponse.json(
       { error: 'Senkronizasyon hatası: ' + error.message },
       { status: 500 }
