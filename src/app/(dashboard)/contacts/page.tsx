@@ -88,15 +88,16 @@ export default function ContactsPage() {
         await Promise.all([loadContacts(), loadGroups()]);
         router.refresh();
       } else {
+        const errorMsg = data.error || (data.step ? `Hata [${data.step}]: ${JSON.stringify(data)}` : 'WhatsApp senkronizasyonu tamamlanamadı.');
         setSyncStatus({
           type: 'error',
-          text: data.error || 'WhatsApp senkronizasyonu tamamlanamadı.',
+          text: `❌ ${errorMsg}`,
         });
       }
     } catch (err: any) {
       setSyncStatus({
         type: 'error',
-        text: 'Bağlantı hatası: ' + err.message,
+        text: '❌ Bağlantı hatası: ' + err.message,
       });
     } finally {
       setSyncing(false);
