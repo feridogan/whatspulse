@@ -73,12 +73,15 @@ export default function ContactsPage() {
       }
       const data = await res.json();
       if (res.ok && data.success) {
+        const count = typeof data.contactsCount === 'number' ? data.contactsCount : data.synced?.totalContacts;
+        const gCount = typeof data.groupsCount === 'number' ? data.groupsCount : data.synced?.totalGroups;
+        
         setSyncStatus({
           type: 'success',
-          text: `✅ ${data.message || 'Senkronizasyon başarıyla tamamlandı!'}`,
+          text: `✅ ${data.message || `Senkronizasyon Başarılı: ${count || 0} Kişi ve ${gCount || 0} Grup yüklendi.`}`,
         });
-        if (typeof data.synced?.totalContacts === 'number') {
-          setTotal(data.synced.totalContacts);
+        if (typeof count === 'number') {
+          setTotal(count);
         }
         await Promise.all([loadContacts(), loadGroups()]);
       } else {
