@@ -9,7 +9,7 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs', 'pg', 'ioredis', 'bullmq'],
   },
   webpack: (config) => {
     config.resolve.alias = {
