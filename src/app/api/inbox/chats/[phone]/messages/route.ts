@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
+import { normalizePhone, formatPhoneNumber, formatPhoneDisplay } from '@/lib/utils';
 
 export async function GET(req: NextRequest, { params }: { params: { phone: string } }) {
   try {
     const rawTarget = decodeURIComponent(params.phone).trim();
     const isGroup = rawTarget.includes('@g.us');
 
-    let digits = '';
+    let cleanDigits = '';
     let phone = rawTarget;
     let remoteJid = rawTarget;
 
@@ -15,20 +16,21 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       remoteJid = rawTarget;
       phone = rawTarget;
     } else {
-      digits = rawTarget.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-      phone = `+${digits}`;
-      remoteJid = `${digits}@s.whatsapp.net`;
+      cleanDigits = normalizePhone(rawTarget);
+      phone = `+${cleanDigits}`;
+      remoteJid = `${cleanDigits}@s.whatsapp.net`;
     }
 
-    // 1. Find contact info from database (by phone or name)
-    const contact = isGroup
+    // 1. Find contact info from database (by phone)
+    let contact = isGroup
       ? null
       : await prisma.contact.findFirst({
           where: {
             OR: [
-              { phone: `+${digits}` },
-              { phone: digits },
-              { phone: `++${digits}` },
+              { phone: `+${cleanDigits}` },
+              { phone: cleanDigits },
+              { phone: `0${cleanDigits.slice(2)}` },
+              { phone: cleanDigits.slice(2) },
             ],
           },
           include: {
@@ -40,9 +42,8 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
     let chat = await prisma.chat.findFirst({
       where: {
         OR: [
-          { phone: isGroup ? rawTarget : phone },
-          { phone: isGroup ? rawTarget : digits },
-          { phone: isGroup ? rawTarget : `++${digits}` },
+          { phone: isGroup ? rawTarget : `+${cleanDigits}` },
+          { phone: isGroup ? rawTarget : cleanDigits },
         ],
       },
       include: {
@@ -53,20 +54,20 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       },
     });
 
-    const groupFallbackName = isGroup ? 'WhatsApp Grubu' : phone;
-    const realName = isGroup ? (chat?.contactName || groupFallbackName) : (contact?.name || chat?.contactName || phone);
+    const groupFallbackName = isGroup ? 'WhatsApp Grubu' : formatPhoneDisplay(phone);
+    const realName = isGroup ? (chat?.contactName || groupFallbackName) : (contact?.name || chat?.contactName || formatPhoneDisplay(phone));
     const hasRealName = !isGroup && Boolean(
       realName &&
       realName !== phone &&
-      realName !== digits &&
-      realName.replace(/\D/g, '') !== digits
+      realName !== cleanDigits &&
+      realName.replace(/\D/g, '') !== cleanDigits
     );
-    const finalName = hasRealName ? realName : isGroup ? realName : phone;
+    const finalName = hasRealName ? realName : isGroup ? realName : formatPhoneDisplay(phone);
 
     if (!chat) {
       chat = await prisma.chat.create({
         data: {
-          phone: isGroup ? rawTarget : phone,
+          phone: isGroup ? rawTarget : `+${cleanDigits}`,
           contactName: finalName,
           lastMessage: isGroup ? 'Grup Sohbeti' : '',
           lastMessageTime: new Date(),
@@ -127,7 +128,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
         }
       }
     } catch (evoErr) {
-      console.warn('[Messages API] Evolution findMessages error (fallback to local):', evoErr);
+      console.warn('[Messages API] Evolution findMessages error:', evoErr);
     }
 
     // Sort all messages ascending
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
     return NextResponse.json({
       chat: {
         ...chat,
-        phone: isGroup ? rawTarget : phone,
+        phone: isGroup ? rawTarget : `+${cleanDigits}`,
         jid: remoteJid,
         isGroup,
         contactName: finalName,
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
       return NextResponse.json({ error: 'Mesaj içeriği veya medya zorunludur.' }, { status: 400 });
     }
 
-    let digits = '';
+    let cleanDigits = '';
     let phone = rawTarget;
     let targetNumber = rawTarget;
 
@@ -168,9 +169,9 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
       targetNumber = rawTarget;
       phone = rawTarget;
     } else {
-      digits = rawTarget.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-      phone = `+${digits}`;
-      targetNumber = digits; // Pure digits without + for Evolution API
+      cleanDigits = normalizePhone(rawTarget);
+      phone = `+${cleanDigits}`;
+      targetNumber = cleanDigits; // Pure digits without + for Evolution API v2 (e.g. 905354581501)
     }
 
     // Send via Evolution API v2
@@ -189,9 +190,10 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
       : await prisma.contact.findFirst({
           where: {
             OR: [
-              { phone: `+${digits}` },
-              { phone: digits },
-              { phone: `++${digits}` },
+              { phone: `+${cleanDigits}` },
+              { phone: cleanDigits },
+              { phone: `0${cleanDigits.slice(2)}` },
+              { phone: cleanDigits.slice(2) },
             ],
           },
         });
@@ -200,19 +202,18 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
     let chat = await prisma.chat.findFirst({
       where: {
         OR: [
-          { phone: isGroup ? rawTarget : phone },
-          { phone: isGroup ? rawTarget : digits },
-          { phone: isGroup ? rawTarget : `++${digits}` },
+          { phone: isGroup ? rawTarget : `+${cleanDigits}` },
+          { phone: isGroup ? rawTarget : cleanDigits },
         ],
       },
     });
 
-    const contactName = isGroup ? (chat?.contactName || 'WhatsApp Grubu') : (contact?.name || `+${digits}`);
+    const contactName = isGroup ? (chat?.contactName || 'WhatsApp Grubu') : (contact?.name || formatPhoneDisplay(phone));
 
     if (!chat) {
       chat = await prisma.chat.create({
         data: {
-          phone: isGroup ? rawTarget : phone,
+          phone: isGroup ? rawTarget : `+${cleanDigits}`,
           contactName,
           lastMessage: content || '[Medya]',
           lastMessageTime: new Date(),

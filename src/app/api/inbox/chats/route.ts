@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
+import { normalizePhone, formatPhoneNumber, formatPhoneDisplay } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,11 +29,12 @@ export async function GET(req: NextRequest) {
     const contactByName = new Map<string, any>();
 
     contacts.forEach((c) => {
-      const cleanDigits = c.phone.replace(/^\++/, '').replace(/\D/g, '');
+      const cleanDigits = normalizePhone(c.phone);
       if (cleanDigits) {
-        contactByPhone.set(`+${cleanDigits}`, c);
         contactByPhone.set(cleanDigits, c);
-        contactByPhone.set(`++${cleanDigits}`, c);
+        contactByPhone.set(`+${cleanDigits}`, c);
+        contactByPhone.set(`0${cleanDigits.slice(2)}`, c);
+        contactByPhone.set(cleanDigits.slice(2), c);
       }
       if (c.name) {
         contactByName.set(c.name.toLowerCase().trim(), c);
@@ -79,55 +81,69 @@ export async function GET(req: NextRequest) {
         });
       } else {
         // Individual or LID
-        const isLid = jid.includes('@lid');
         const rawDigits = jid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+        const isLid = jid.includes('@lid') || (rawDigits.startsWith('52') && rawDigits.length >= 13);
 
-        // Try to match contact by phone first, then by name
+        // Try to match contact by phone first
         let matchedContact = null;
         if (!isLid && rawDigits.length >= 10 && rawDigits.length <= 13) {
-          matchedContact = contactByPhone.get(`+${rawDigits}`) || contactByPhone.get(rawDigits);
+          const normDigits = normalizePhone(rawDigits);
+          matchedContact =
+            contactByPhone.get(normDigits) ||
+            contactByPhone.get(`+${normDigits}`) ||
+            contactByPhone.get(rawDigits);
         }
 
+        // Try to match contact by name (for LID or unnamed sessions)
         if (!matchedContact) {
           const searchName = (ec.name || ec.pushName || ec.verifiedName || '').toLowerCase().trim();
           if (searchName) {
             matchedContact = contactByName.get(searchName);
+            if (!matchedContact) {
+              matchedContact = contacts.find((c) => {
+                const cName = (c.name || '').toLowerCase().trim();
+                return cName && (cName === searchName || cName.includes(searchName) || searchName.includes(cName));
+              });
+            }
           }
         }
 
-        // If it is an internal LID (e.g. 52401...) without a matched contact, ignore it to prevent fake numbers
+        // If it is an internal LID without any matched contact in DB, SKIP IT to prevent fake +52... numbers
         if (isLid && !matchedContact) {
           continue;
         }
 
-        // Also check if rawDigits looks like a fake 14-16 digit internal ID starting with 52
-        if (!matchedContact && (rawDigits.length > 13 || (rawDigits.startsWith('52') && rawDigits.length >= 14))) {
+        // If raw digits is too long or fake without contact match, skip it
+        if (!matchedContact && (rawDigits.length > 13 || (rawDigits.startsWith('52') && rawDigits.length >= 13))) {
           continue;
         }
 
-        const realPhone = matchedContact
-          ? (matchedContact.phone.startsWith('+') ? matchedContact.phone : `+${matchedContact.phone.replace(/\D/g, '')}`)
-          : `+${rawDigits}`;
+        let phone = '';
+        if (matchedContact) {
+          phone = formatPhoneNumber(matchedContact.phone);
+        } else {
+          phone = formatPhoneNumber(rawDigits);
+        }
 
-        const cleanDigits = realPhone.replace(/\D/g, '');
-        const candidateName = matchedContact?.name || ec.pushName || ec.name || ec.verifiedName || realPhone;
+        const cleanDigits = normalizePhone(phone);
+        const candidateName = matchedContact?.name || ec.pushName || ec.name || ec.verifiedName || phone;
         const hasRealName = Boolean(
           candidateName &&
-          candidateName !== realPhone &&
+          candidateName !== phone &&
           candidateName !== `+${cleanDigits}` &&
           candidateName !== cleanDigits &&
           candidateName.replace(/\D/g, '') !== cleanDigits
         );
 
-        const displayName = hasRealName ? candidateName : realPhone;
+        const displayName = hasRealName ? candidateName : formatPhoneDisplay(phone);
         const lastMsg = typeof ec.lastMessage === 'string' ? ec.lastMessage : ec.lastMessage?.conversation || ec.lastMessage?.extendedTextMessage?.text || '';
         const ts = ec.conversationTimestamp || ec.lastMsgTimestamp || ec.updatedAt;
         const lastTime = ts ? new Date(Number(ts) * (String(ts).length <= 10 ? 1000 : 1)) : new Date();
 
-        processedMap.set(realPhone, {
-          id: realPhone,
+        processedMap.set(phone, {
+          id: phone,
           jid: `${cleanDigits}@s.whatsapp.net`,
-          phone: realPhone,
+          phone,
           name: displayName,
           displayName,
           contactName: displayName,
@@ -147,8 +163,8 @@ export async function GET(req: NextRequest) {
       const jid = dc.phone;
       const isGroup = jid.includes('@g.us') || dc.isGroup;
 
-      if (!processedMap.has(jid)) {
-        if (isGroup) {
+      if (isGroup) {
+        if (!processedMap.has(jid)) {
           processedMap.set(jid, {
             id: jid,
             jid,
@@ -164,12 +180,31 @@ export async function GET(req: NextRequest) {
             contact: null,
             groups: [],
           });
-        } else {
-          const cleanDigits = jid.replace(/^\++/, '').replace(/\D/g, '');
-          if (!cleanDigits || cleanDigits.length < 10) continue;
+        }
+      } else {
+        const rawDigits = jid.replace(/^\++/, '').replace(/\D/g, '');
+        const isLid = jid.includes('@lid') || (rawDigits.startsWith('52') && rawDigits.length >= 13);
 
-          const phone = `+${cleanDigits}`;
-          const matchedContact = contactByPhone.get(phone) || contactByPhone.get(cleanDigits);
+        let matchedContact = null;
+        if (!isLid && rawDigits.length >= 10 && rawDigits.length <= 13) {
+          const normDigits = normalizePhone(rawDigits);
+          matchedContact = contactByPhone.get(normDigits) || contactByPhone.get(`+${normDigits}`) || contactByPhone.get(rawDigits);
+        }
+
+        if (!matchedContact && dc.contactName) {
+          const searchName = dc.contactName.toLowerCase().trim();
+          matchedContact = contactByName.get(searchName);
+        }
+
+        if (isLid && !matchedContact) {
+          continue;
+        }
+
+        const phone = matchedContact ? formatPhoneNumber(matchedContact.phone) : formatPhoneNumber(rawDigits);
+        if (!phone || phone.length < 10) continue;
+
+        if (!processedMap.has(phone)) {
+          const cleanDigits = normalizePhone(phone);
           const candidateName = matchedContact?.name || dc.contactName || phone;
           const hasRealName = Boolean(
             candidateName &&
@@ -178,7 +213,7 @@ export async function GET(req: NextRequest) {
             candidateName !== cleanDigits &&
             candidateName.replace(/\D/g, '') !== cleanDigits
           );
-          const displayName = hasRealName ? candidateName : phone;
+          const displayName = hasRealName ? candidateName : formatPhoneDisplay(phone);
 
           processedMap.set(phone, {
             id: phone,

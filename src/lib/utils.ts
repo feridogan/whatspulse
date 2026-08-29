@@ -26,7 +26,7 @@ export function normalizePhone(rawPhone: string, defaultCountryCode = '90'): str
 
 export function formatPhoneNumber(phone: string): string {
   if (!phone) return '';
-  const digits = String(phone).replace(/\D/g, '');
+  const digits = normalizePhone(phone);
   return `+${digits}`;
 }
 
