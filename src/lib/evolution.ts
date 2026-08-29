@@ -219,9 +219,9 @@ export class EvolutionService {
     mediaType?: string
   ) {
     const { client, instance } = await getClient();
-    const cleanNumber = recipient.includes('@')
+    const cleanNumber = recipient.includes('@g.us')
       ? recipient
-      : normalizePhone(recipient).replace(/\D/g, '');
+      : recipient.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
 
     if (mediaUrl && mediaType && mediaType !== 'text') {
       const payload: any = {
@@ -246,6 +246,14 @@ export class EvolutionService {
 
     const res = await client.post(`/message/sendText/${encodeURIComponent(instance)}`, payload);
     return res.data;
+  }
+
+  static async sendText(recipient: string, text: string) {
+    return this.sendMessage(recipient, text);
+  }
+
+  static async sendMedia(recipient: string, mediaUrl: string, mediaType: 'image' | 'video' | 'document' | 'audio' = 'image', caption?: string) {
+    return this.sendMessage(recipient, caption || '', mediaUrl, mediaType);
   }
 
   /**

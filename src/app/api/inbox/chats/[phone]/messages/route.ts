@@ -6,7 +6,6 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
   try {
     const rawTarget = decodeURIComponent(params.phone).trim();
     const isGroup = rawTarget.includes('@g.us');
-    const isJid = rawTarget.includes('@s.whatsapp.net') || isGroup;
 
     let digits = '';
     let phone = rawTarget;
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       remoteJid = `${digits}@s.whatsapp.net`;
     }
 
-    // 1. Find contact info if not group
+    // 1. Find contact info from database (by phone or name)
     const contact = isGroup
       ? null
       : await prisma.contact.findFirst({
@@ -163,23 +162,23 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
 
     let digits = '';
     let phone = rawTarget;
-    let remoteJid = rawTarget;
+    let targetNumber = rawTarget;
 
     if (isGroup) {
-      remoteJid = rawTarget;
+      targetNumber = rawTarget;
       phone = rawTarget;
     } else {
       digits = rawTarget.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
       phone = `+${digits}`;
-      remoteJid = `${digits}@s.whatsapp.net`;
+      targetNumber = digits; // Pure digits without + for Evolution API
     }
 
-    // Send via Evolution API
+    // Send via Evolution API v2
     let result: any;
     if (mediaUrl) {
-      result = await EvolutionService.sendMessage(remoteJid, content || '', mediaUrl, mediaType);
+      result = await EvolutionService.sendMessage(targetNumber, content || '', mediaUrl, mediaType);
     } else {
-      result = await EvolutionService.sendMessage(remoteJid, content);
+      result = await EvolutionService.sendMessage(targetNumber, content);
     }
 
     const evoMsgId = result?.key?.id || result?.messageId || null;

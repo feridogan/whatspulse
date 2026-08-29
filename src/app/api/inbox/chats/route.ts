@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       console.warn('[Chats API] Evolution fetchChats warning:', e);
     }
 
-    // 2. Fetch local contacts for name matching
+    // 2. Fetch all local contacts for accurate name & phone matching
     const contacts = await prisma.contact.findMany({
       include: {
         groups: {
@@ -24,13 +24,18 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const contactMap = new Map<string, any>();
+    const contactByPhone = new Map<string, any>();
+    const contactByName = new Map<string, any>();
+
     contacts.forEach((c) => {
       const cleanDigits = c.phone.replace(/^\++/, '').replace(/\D/g, '');
       if (cleanDigits) {
-        contactMap.set(`+${cleanDigits}`, c);
-        contactMap.set(cleanDigits, c);
-        contactMap.set(`++${cleanDigits}`, c);
+        contactByPhone.set(`+${cleanDigits}`, c);
+        contactByPhone.set(cleanDigits, c);
+        contactByPhone.set(`++${cleanDigits}`, c);
+      }
+      if (c.name) {
+        contactByName.set(c.name.toLowerCase().trim(), c);
       }
     });
 
@@ -40,17 +45,12 @@ export async function GET(req: NextRequest) {
       take: 200,
     });
 
-    const dbChatMap = new Map<string, any>();
-    dbChats.forEach((c) => {
-      dbChatMap.set(c.phone, c);
-    });
-
     const processedMap = new Map<string, any>();
 
-    // Process Evolution API chats first
+    // Process Evolution API chats
     for (const ec of evoChats) {
       const jid = (ec.id || ec.remoteJid || ec.jid || '').trim();
-      if (!jid || jid.endsWith('@broadcast') || jid.endsWith('@newsletter') || jid.endsWith('@lid')) {
+      if (!jid || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) {
         continue;
       }
 
@@ -78,30 +78,56 @@ export async function GET(req: NextRequest) {
           groups: [],
         });
       } else {
-        // Individual contact
+        // Individual or LID
+        const isLid = jid.includes('@lid');
         const rawDigits = jid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-        if (!rawDigits) continue;
-        const phone = `+${rawDigits}`;
-        const matchedContact = contactMap.get(phone) || contactMap.get(rawDigits) || contactMap.get(`++${rawDigits}`);
 
-        const candidateName = matchedContact?.name || ec.pushName || ec.name || ec.verifiedName || phone;
+        // Try to match contact by phone first, then by name
+        let matchedContact = null;
+        if (!isLid && rawDigits.length >= 10 && rawDigits.length <= 13) {
+          matchedContact = contactByPhone.get(`+${rawDigits}`) || contactByPhone.get(rawDigits);
+        }
+
+        if (!matchedContact) {
+          const searchName = (ec.name || ec.pushName || ec.verifiedName || '').toLowerCase().trim();
+          if (searchName) {
+            matchedContact = contactByName.get(searchName);
+          }
+        }
+
+        // If it is an internal LID (e.g. 52401...) without a matched contact, ignore it to prevent fake numbers
+        if (isLid && !matchedContact) {
+          continue;
+        }
+
+        // Also check if rawDigits looks like a fake 14-16 digit internal ID starting with 52
+        if (!matchedContact && (rawDigits.length > 13 || (rawDigits.startsWith('52') && rawDigits.length >= 14))) {
+          continue;
+        }
+
+        const realPhone = matchedContact
+          ? (matchedContact.phone.startsWith('+') ? matchedContact.phone : `+${matchedContact.phone.replace(/\D/g, '')}`)
+          : `+${rawDigits}`;
+
+        const cleanDigits = realPhone.replace(/\D/g, '');
+        const candidateName = matchedContact?.name || ec.pushName || ec.name || ec.verifiedName || realPhone;
         const hasRealName = Boolean(
           candidateName &&
-          candidateName !== phone &&
-          candidateName !== `+${rawDigits}` &&
-          candidateName !== rawDigits &&
-          candidateName.replace(/\D/g, '') !== rawDigits
+          candidateName !== realPhone &&
+          candidateName !== `+${cleanDigits}` &&
+          candidateName !== cleanDigits &&
+          candidateName.replace(/\D/g, '') !== cleanDigits
         );
 
-        const displayName = hasRealName ? candidateName : phone;
+        const displayName = hasRealName ? candidateName : realPhone;
         const lastMsg = typeof ec.lastMessage === 'string' ? ec.lastMessage : ec.lastMessage?.conversation || ec.lastMessage?.extendedTextMessage?.text || '';
         const ts = ec.conversationTimestamp || ec.lastMsgTimestamp || ec.updatedAt;
         const lastTime = ts ? new Date(Number(ts) * (String(ts).length <= 10 ? 1000 : 1)) : new Date();
 
-        processedMap.set(phone, {
-          id: phone,
-          jid,
-          phone,
+        processedMap.set(realPhone, {
+          id: realPhone,
+          jid: `${cleanDigits}@s.whatsapp.net`,
+          phone: realPhone,
           name: displayName,
           displayName,
           contactName: displayName,
@@ -116,7 +142,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Merge with DB chats that might not be in the recent Evolution buffer
+    // Merge with DB chats
     for (const dc of dbChats) {
       const jid = dc.phone;
       const isGroup = jid.includes('@g.us') || dc.isGroup;
@@ -140,8 +166,10 @@ export async function GET(req: NextRequest) {
           });
         } else {
           const cleanDigits = jid.replace(/^\++/, '').replace(/\D/g, '');
+          if (!cleanDigits || cleanDigits.length < 10) continue;
+
           const phone = `+${cleanDigits}`;
-          const matchedContact = contactMap.get(phone) || contactMap.get(cleanDigits);
+          const matchedContact = contactByPhone.get(phone) || contactByPhone.get(cleanDigits);
           const candidateName = matchedContact?.name || dc.contactName || phone;
           const hasRealName = Boolean(
             candidateName &&
