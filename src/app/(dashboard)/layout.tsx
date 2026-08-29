@@ -4,6 +4,9 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { AuthProvider } from '@/context/AuthContext';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function DashboardLayout({
   children,
 }: {
