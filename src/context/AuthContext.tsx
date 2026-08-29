@@ -86,5 +86,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    return {
+      user: null,
+      loading: false,
+      isAdmin: false,
+      refreshUser: async () => {},
+      logout: async () => {},
+    };
+  }
+  return context;
 }
