@@ -219,7 +219,9 @@ export class EvolutionService {
     mediaType?: string
   ) {
     const { client, instance } = await getClient();
-    const cleanNumber = normalizePhone(recipient).replace(/\D/g, '');
+    const cleanNumber = recipient.includes('@')
+      ? recipient
+      : normalizePhone(recipient).replace(/\D/g, '');
 
     if (mediaUrl && mediaType && mediaType !== 'text') {
       const payload: any = {

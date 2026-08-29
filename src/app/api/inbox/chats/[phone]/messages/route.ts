@@ -4,33 +4,46 @@ import { EvolutionService } from '@/lib/evolution';
 
 export async function GET(req: NextRequest, { params }: { params: { phone: string } }) {
   try {
-    const rawPhone = decodeURIComponent(params.phone);
-    const digits = rawPhone.replace(/^\++/, '').replace(/\D/g, '');
-    const phone = `+${digits}`;
-    const isGroup = rawPhone.includes('@g.us');
-    const remoteJid = isGroup ? rawPhone : `${digits}@s.whatsapp.net`;
+    const rawTarget = decodeURIComponent(params.phone).trim();
+    const isGroup = rawTarget.includes('@g.us');
+    const isJid = rawTarget.includes('@s.whatsapp.net') || isGroup;
 
-    // 1. Find contact info from database
-    const contact = await prisma.contact.findFirst({
-      where: {
-        OR: [
-          { phone: `+${digits}` },
-          { phone: digits },
-          { phone: `++${digits}` },
-        ],
-      },
-      include: {
-        groups: { include: { group: true } },
-      },
-    });
+    let digits = '';
+    let phone = rawTarget;
+    let remoteJid = rawTarget;
+
+    if (isGroup) {
+      remoteJid = rawTarget;
+      phone = rawTarget;
+    } else {
+      digits = rawTarget.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+      phone = `+${digits}`;
+      remoteJid = `${digits}@s.whatsapp.net`;
+    }
+
+    // 1. Find contact info if not group
+    const contact = isGroup
+      ? null
+      : await prisma.contact.findFirst({
+          where: {
+            OR: [
+              { phone: `+${digits}` },
+              { phone: digits },
+              { phone: `++${digits}` },
+            ],
+          },
+          include: {
+            groups: { include: { group: true } },
+          },
+        });
 
     // 2. Find or create local Chat record
     let chat = await prisma.chat.findFirst({
       where: {
         OR: [
-          { phone: `+${digits}` },
-          { phone: digits },
-          { phone: `++${digits}` },
+          { phone: isGroup ? rawTarget : phone },
+          { phone: isGroup ? rawTarget : digits },
+          { phone: isGroup ? rawTarget : `++${digits}` },
         ],
       },
       include: {
@@ -41,16 +54,22 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       },
     });
 
-    const realName = contact?.name || chat?.contactName || phone;
-    const isReal = realName && realName !== phone && realName !== digits && realName.replace(/\D/g, '') !== digits;
-    const finalName = isReal ? realName : phone;
+    const groupFallbackName = isGroup ? 'WhatsApp Grubu' : phone;
+    const realName = isGroup ? (chat?.contactName || groupFallbackName) : (contact?.name || chat?.contactName || phone);
+    const hasRealName = !isGroup && Boolean(
+      realName &&
+      realName !== phone &&
+      realName !== digits &&
+      realName.replace(/\D/g, '') !== digits
+    );
+    const finalName = hasRealName ? realName : isGroup ? realName : phone;
 
     if (!chat) {
       chat = await prisma.chat.create({
         data: {
-          phone,
+          phone: isGroup ? rawTarget : phone,
           contactName: finalName,
-          lastMessage: '',
+          lastMessage: isGroup ? 'Grup Sohbeti' : '',
           lastMessageTime: new Date(),
           unreadCount: 0,
           isGroup,
@@ -66,7 +85,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       });
     }
 
-    // 3. Fetch recent messages from Evolution API v2 to ensure message history is 100% complete
+    // 3. Fetch recent messages directly from Evolution API v2 (POST /chat/findMessages/ff)
     try {
       const evoMessages = await EvolutionService.findMessages(remoteJid, 50);
       if (Array.isArray(evoMessages) && evoMessages.length > 0) {
@@ -91,7 +110,8 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
               '';
 
             const fromMe = key.fromMe === true;
-            const ts = item.messageTimestamp ? new Date(Number(item.messageTimestamp) * 1000) : new Date();
+            const tsRaw = item.messageTimestamp;
+            const ts = tsRaw ? new Date(Number(tsRaw) * (String(tsRaw).length <= 10 ? 1000 : 1)) : new Date();
 
             const savedMsg = await prisma.chatMessage.create({
               data: {
@@ -108,7 +128,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
         }
       }
     } catch (evoErr) {
-      // Non-blocking fallback to local messages
+      console.warn('[Messages API] Evolution findMessages error (fallback to local):', evoErr);
     }
 
     // Sort all messages ascending
@@ -117,7 +137,9 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
     return NextResponse.json({
       chat: {
         ...chat,
-        phone,
+        phone: isGroup ? rawTarget : phone,
+        jid: remoteJid,
+        isGroup,
         contactName: finalName,
         displayName: finalName,
       },
@@ -131,65 +153,78 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
 
 export async function POST(req: NextRequest, { params }: { params: { phone: string } }) {
   try {
-    const rawPhone = decodeURIComponent(params.phone);
-    const digits = rawPhone.replace(/^\++/, '').replace(/\D/g, '');
-    const phone = `+${digits}`;
+    const rawTarget = decodeURIComponent(params.phone).trim();
+    const isGroup = rawTarget.includes('@g.us');
     const { content, mediaUrl, mediaType = 'text' } = await req.json();
 
     if (!content && !mediaUrl) {
       return NextResponse.json({ error: 'Mesaj içeriği veya medya zorunludur.' }, { status: 400 });
     }
 
+    let digits = '';
+    let phone = rawTarget;
+    let remoteJid = rawTarget;
+
+    if (isGroup) {
+      remoteJid = rawTarget;
+      phone = rawTarget;
+    } else {
+      digits = rawTarget.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+      phone = `+${digits}`;
+      remoteJid = `${digits}@s.whatsapp.net`;
+    }
+
     // Send via Evolution API
     let result: any;
     if (mediaUrl) {
-      result = await EvolutionService.sendMessage(phone, content || '', mediaUrl, mediaType);
+      result = await EvolutionService.sendMessage(remoteJid, content || '', mediaUrl, mediaType);
     } else {
-      result = await EvolutionService.sendMessage(phone, content);
+      result = await EvolutionService.sendMessage(remoteJid, content);
     }
 
     const evoMsgId = result?.key?.id || result?.messageId || null;
 
     // Find contact info if any
-    const contact = await prisma.contact.findFirst({
-      where: {
-        OR: [
-          { phone: `+${digits}` },
-          { phone: digits },
-          { phone: `++${digits}` },
-        ],
-      },
-    });
+    const contact = isGroup
+      ? null
+      : await prisma.contact.findFirst({
+          where: {
+            OR: [
+              { phone: `+${digits}` },
+              { phone: digits },
+              { phone: `++${digits}` },
+            ],
+          },
+        });
 
     // Find or create chat
     let chat = await prisma.chat.findFirst({
       where: {
         OR: [
-          { phone: `+${digits}` },
-          { phone: digits },
-          { phone: `++${digits}` },
+          { phone: isGroup ? rawTarget : phone },
+          { phone: isGroup ? rawTarget : digits },
+          { phone: isGroup ? rawTarget : `++${digits}` },
         ],
       },
     });
 
-    const contactName = contact?.name || `+${digits}`;
+    const contactName = isGroup ? (chat?.contactName || 'WhatsApp Grubu') : (contact?.name || `+${digits}`);
 
     if (!chat) {
       chat = await prisma.chat.create({
         data: {
-          phone,
+          phone: isGroup ? rawTarget : phone,
           contactName,
           lastMessage: content || '[Medya]',
           lastMessageTime: new Date(),
           unreadCount: 0,
+          isGroup,
         },
       });
     } else {
       await prisma.chat.update({
         where: { id: chat.id },
         data: {
-          phone,
-          contactName: contact?.name || chat.contactName,
           lastMessage: content || '[Medya]',
           lastMessageTime: new Date(),
         },

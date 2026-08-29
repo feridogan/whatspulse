@@ -197,41 +197,59 @@ function InboxContent() {
           ) : (
             chats.map((chat) => {
               const isSelected = activePhone === chat.phone;
+              const isGroup = chat.isGroup || chat.phone?.includes('@g.us');
               const cleanDigits = chat.phone?.replace(/\D/g, '') || '';
-              const rawTitle = (chat.displayName || chat.contactName || '').trim();
-              const hasRealName = Boolean(
+              const rawTitle = (chat.displayName || chat.name || chat.contactName || '').trim();
+              const hasRealName = !isGroup && Boolean(
                 rawTitle &&
                 rawTitle !== chat.phone &&
                 rawTitle !== `+${cleanDigits}` &&
                 rawTitle !== cleanDigits &&
                 rawTitle.replace(/\D/g, '') !== cleanDigits
               );
-              const displayTitle = hasRealName ? rawTitle : formatPhoneDisplay(chat.phone);
+              const displayTitle = isGroup ? rawTitle : hasRealName ? rawTitle : formatPhoneDisplay(chat.phone);
 
               return (
                 <button
-                  key={chat.id}
+                  key={chat.id || chat.phone}
                   onClick={() => setActivePhone(chat.phone)}
                   className={`w-full text-left p-3.5 flex items-center justify-between gap-3 transition-colors ${
                     isSelected ? 'bg-[#202c33]' : 'hover:bg-[#202c33]/50'
                   }`}
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                      {displayTitle.charAt(0).toUpperCase()}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${
+                      isGroup
+                        ? 'bg-gradient-to-tr from-indigo-600 to-purple-600'
+                        : 'bg-gradient-to-tr from-emerald-600 to-teal-500'
+                    }`}>
+                      {isGroup ? '👥' : displayTitle.charAt(0).toUpperCase()}
                     </div>
                     <div className="overflow-hidden">
-                      <div className="font-semibold text-xs text-white truncate">
-                        {displayTitle}
+                      <div className="font-semibold text-xs text-white truncate flex items-center gap-1.5">
+                        <span className="truncate">{displayTitle}</span>
+                        {isGroup && (
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 text-[9px] font-semibold shrink-0">
+                            Grup
+                          </span>
+                        )}
                       </div>
-                      {hasRealName && (
-                        <div className="text-[11px] text-emerald-400/90 font-mono truncate mt-0.5">
-                          {formatPhoneDisplay(chat.phone)}
+                      {isGroup ? (
+                        <div className="text-[11px] text-gray-400 truncate mt-0.5">
+                          {chat.lastMessage || 'Grup Sohbeti'}
                         </div>
+                      ) : (
+                        <>
+                          {hasRealName && (
+                            <div className="text-[11px] text-emerald-400/90 font-mono truncate mt-0.5">
+                              {formatPhoneDisplay(chat.phone)}
+                            </div>
+                          )}
+                          <div className="text-[11px] text-gray-400 truncate mt-0.5">
+                            {chat.lastMessage || 'Sohbet başlatıldı'}
+                          </div>
+                        </>
                       )}
-                      <div className="text-[11px] text-gray-400 truncate mt-0.5">
-                        {chat.lastMessage || 'Sohbet başlatıldı'}
-                      </div>
                     </div>
                   </div>
 
@@ -275,33 +293,43 @@ function InboxContent() {
                 </button>
 
                 {(() => {
+                  const isGroup = activePhone?.includes('@g.us') || activeChat?.chat?.isGroup;
                   const activeCleanDigits = activePhone?.replace(/\D/g, '') || '';
-                  const activeRawTitle = (activeChat?.contact?.name || activeChat?.chat?.contactName || '').trim();
-                  const activeHasRealName = Boolean(
+                  const activeRawTitle = (activeChat?.chat?.displayName || activeChat?.contact?.name || activeChat?.chat?.contactName || '').trim();
+                  const activeHasRealName = !isGroup && Boolean(
                     activeRawTitle &&
                     activeRawTitle !== activePhone &&
                     activeRawTitle !== `+${activeCleanDigits}` &&
                     activeRawTitle !== activeCleanDigits &&
                     activeRawTitle.replace(/\D/g, '') !== activeCleanDigits
                   );
-                  const activeDisplayTitle = activeHasRealName ? activeRawTitle : formatPhoneDisplay(activePhone);
+                  const activeDisplayTitle = isGroup ? activeRawTitle : activeHasRealName ? activeRawTitle : formatPhoneDisplay(activePhone);
 
                   return (
                     <>
-                      <div className="w-9 h-9 rounded-full bg-emerald-700 flex items-center justify-center text-white font-bold text-xs">
-                        {activeDisplayTitle.charAt(0).toUpperCase()}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs ${
+                        isGroup ? 'bg-indigo-700' : 'bg-emerald-700'
+                      }`}>
+                        {isGroup ? '👥' : activeDisplayTitle.charAt(0).toUpperCase()}
                       </div>
 
                       <div>
                         <div className="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
                           <span>{activeDisplayTitle}</span>
+                          {isGroup && (
+                            <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 text-[10px] border border-indigo-500/30">
+                              Grup Sohbeti
+                            </span>
+                          )}
                           {isContactBlacklisted && (
                             <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-400 text-[10px] border border-red-500/30">
                               Kara Liste
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-emerald-400 font-mono">{formatPhoneDisplay(activePhone)}</div>
+                        {!isGroup && (
+                          <div className="text-[11px] text-emerald-400 font-mono">{formatPhoneDisplay(activePhone)}</div>
+                        )}
                       </div>
                     </>
                   );
