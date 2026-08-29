@@ -55,10 +55,10 @@ async function main() {
     {
       key: 'evolution_api',
       value: {
-        apiUrl: process.env.EVOLUTION_API_URL || 'https://evo-rc.cakirlar.net',
-        instanceName: process.env.EVOLUTION_INSTANCE || 'feridun',
-        instanceKey: process.env.EVOLUTION_API_KEY || '11E1F8329577-40D3-B891-9CCA41C01658',
-        globalApiKey: process.env.EVOLUTION_GLOBAL_KEY || '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f',
+        apiUrl: process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800',
+        instanceName: process.env.EVOLUTION_INSTANCE || 'ff',
+        instanceKey: process.env.EVOLUTION_API_KEY || '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9',
+        globalApiKey: process.env.EVOLUTION_GLOBAL_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a',
         webhookUrl: process.env.APP_URL ? `${process.env.APP_URL}/api/webhook/evolution` : 'https://mesaj.cakirlar.net/api/webhook/evolution',
         autoSyncContacts: true,
       },
@@ -77,17 +77,12 @@ async function main() {
   ];
 
   for (const s of defaultSettings) {
-    const existing = await prisma.setting.findUnique({
+    await prisma.setting.upsert({
       where: { key: s.key },
+      update: { value: s.value },
+      create: { key: s.key, value: s.value },
     });
-    if (!existing) {
-      await prisma.setting.create({
-        data: { key: s.key, value: s.value },
-      });
-      console.log(`✅ Default setting created: ${s.key}`);
-    } else {
-      console.log(`ℹ️ Setting already exists (preserving user config): ${s.key}`);
-    }
+    console.log(`✅ Setting synced: ${s.key}`);
   }
 
   // 3. Seed Default Contact Groups

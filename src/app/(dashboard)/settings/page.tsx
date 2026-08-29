@@ -23,10 +23,10 @@ export default function SettingsPage() {
   const { isAdmin, loading: authLoading } = useAuth();
 
   const [evoForm, setEvoForm] = useState({
-    apiUrl: 'https://evo-rc.cakirlar.net',
-    instanceName: 'feridun',
-    instanceKey: '11E1F8329577-40D3-B891-9CCA41C01658',
-    globalApiKey: '4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f',
+    apiUrl: 'http://10.0.201.201:3800',
+    instanceName: 'ff',
+    instanceKey: '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9',
+    globalApiKey: '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a',
     webhookUrl: 'https://mesaj.cakirlar.net/api/webhook/evolution',
   });
 
@@ -175,13 +175,25 @@ export default function SettingsPage() {
     setStatusMsg(null);
 
     try {
+      // Normalize API URL
+      let normalizedApiUrl = evoForm.apiUrl.trim()
+        .replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2')
+        .replace(/\.3800$/, ':3800')
+        .replace(/\/+$/, '');
+      if (!normalizedApiUrl.startsWith('http://') && !normalizedApiUrl.startsWith('https://')) {
+        normalizedApiUrl = 'http://' + normalizedApiUrl;
+      }
+
+      const updatedEvoForm = { ...evoForm, apiUrl: normalizedApiUrl };
+      setEvoForm(updatedEvoForm);
+
       // 1. Save Evolution Settings
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key: 'evolution_api',
-          value: evoForm,
+          value: updatedEvoForm,
         }),
       });
 
