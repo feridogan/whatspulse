@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       remoteJid = `${cleanDigits}@s.whatsapp.net`;
     }
 
-    // 1. Find contact info from database (by phone)
+    // 1. Find contact info from database
     let contact = isGroup
       ? null
       : await prisma.contact.findFirst({
@@ -93,33 +93,45 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       if (Array.isArray(evoMessages) && evoMessages.length > 0) {
         for (const item of evoMessages) {
           const key = item.key || {};
-          const evoId = key.id;
+          const evoId = key.id || item.id;
           if (!evoId) continue;
 
           // Check if already in local DB
           const exists = chat.messages.some((m) => m.evolutionMessageId === evoId);
           if (!exists) {
-            const msgObj = item.message || {};
+            const msgObj = item.message || item;
             const text =
               msgObj.conversation ||
               msgObj.extendedTextMessage?.text ||
               msgObj.imageMessage?.caption ||
               msgObj.videoMessage?.caption ||
               msgObj.documentMessage?.caption ||
+              msgObj.text ||
+              msgObj.body ||
+              item.body ||
+              item.text ||
               (msgObj.imageMessage ? '[Görsel]' : '') ||
               (msgObj.audioMessage ? '[Ses Kaydı]' : '') ||
               (msgObj.documentMessage ? '[Belge]' : '') ||
               '';
 
-            const fromMe = key.fromMe === true;
-            const tsRaw = item.messageTimestamp;
+            const mediaUrl =
+              msgObj.imageMessage?.url ||
+              msgObj.videoMessage?.url ||
+              msgObj.documentMessage?.url ||
+              item.mediaUrl ||
+              null;
+
+            const fromMe = Boolean(key.fromMe ?? item.fromMe ?? false);
+            const tsRaw = item.messageTimestamp || item.timestamp;
             const ts = tsRaw ? new Date(Number(tsRaw) * (String(tsRaw).length <= 10 ? 1000 : 1)) : new Date();
 
             const savedMsg = await prisma.chatMessage.create({
               data: {
                 chatId: chat.id,
                 sender: fromMe ? 'OUTGOING' : 'INCOMING',
-                content: text || '',
+                content: text || (mediaUrl ? '[Medya]' : ''),
+                mediaUrl,
                 status: fromMe ? 'SENT' : 'DELIVERED',
                 evolutionMessageId: evoId,
                 timestamp: isNaN(ts.getTime()) ? new Date() : ts,

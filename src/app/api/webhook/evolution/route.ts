@@ -53,7 +53,6 @@ export async function POST(req: NextRequest) {
       } else {
         cleanDigits = normalizePhone(remoteJid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, ''));
         if (cleanDigits.startsWith('52') && cleanDigits.length >= 13) {
-          // Skip raw internal LID without phone
           continue;
         }
         if (!cleanDigits || cleanDigits.length < 10) {
@@ -62,7 +61,7 @@ export async function POST(req: NextRequest) {
         phone = `+${cleanDigits}`;
       }
 
-      // Extract message text
+      // Extract message text & media
       const msgObj = item.message || item;
       const text =
         msgObj.conversation ||
@@ -70,10 +69,22 @@ export async function POST(req: NextRequest) {
         msgObj.imageMessage?.caption ||
         msgObj.videoMessage?.caption ||
         msgObj.documentMessage?.caption ||
+        msgObj.text ||
+        msgObj.body ||
+        item.body ||
+        item.text ||
         (msgObj.imageMessage ? '[Görsel]' : '') ||
         (msgObj.documentMessage ? '[Belge]' : '') ||
         (msgObj.audioMessage ? '[Ses Kaydı]' : '') ||
         '';
+
+      const mediaUrl =
+        msgObj.imageMessage?.url ||
+        msgObj.videoMessage?.url ||
+        msgObj.documentMessage?.url ||
+        msgObj.audioMessage?.url ||
+        item.mediaUrl ||
+        null;
 
       const pushName = (item.pushName || payload.pushName || '').trim();
 
@@ -135,7 +146,7 @@ export async function POST(req: NextRequest) {
           data: {
             phone,
             contactName,
-            lastMessage: text || (fromMe ? 'Giden Mesaj' : 'Gelen Mesaj'),
+            lastMessage: text || (mediaUrl ? '[Medya]' : fromMe ? 'Giden Mesaj' : 'Gelen Mesaj'),
             lastMessageTime: new Date(),
             unreadCount: fromMe ? 0 : 1,
             isGroup,
@@ -146,7 +157,7 @@ export async function POST(req: NextRequest) {
           where: { id: chat.id },
           data: {
             contactName: contact?.name || pushName || chat.contactName,
-            lastMessage: text || chat.lastMessage,
+            lastMessage: text || (mediaUrl ? '[Medya]' : chat.lastMessage),
             lastMessageTime: new Date(),
             unreadCount: fromMe ? chat.unreadCount : { increment: 1 },
           },
@@ -154,7 +165,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Record in ChatMessage table
-      const evoMsgId = key.id || null;
+      const evoMsgId = key.id || item.id || null;
       if (evoMsgId) {
         const existingMsg = await prisma.chatMessage.findFirst({
           where: { evolutionMessageId: evoMsgId },
@@ -165,7 +176,8 @@ export async function POST(req: NextRequest) {
             data: {
               chatId: chat.id,
               sender: fromMe ? 'OUTGOING' : 'INCOMING',
-              content: text || '',
+              content: text || (mediaUrl ? '[Medya]' : ''),
+              mediaUrl,
               evolutionMessageId: evoMsgId,
               status: fromMe ? 'SENT' : 'DELIVERED',
               timestamp: new Date(),
@@ -177,7 +189,8 @@ export async function POST(req: NextRequest) {
           data: {
             chatId: chat.id,
             sender: fromMe ? 'OUTGOING' : 'INCOMING',
-            content: text || '',
+            content: text || (mediaUrl ? '[Medya]' : ''),
+            mediaUrl,
             status: fromMe ? 'SENT' : 'DELIVERED',
             timestamp: new Date(),
           },
@@ -190,7 +203,8 @@ export async function POST(req: NextRequest) {
           data: {
             phone,
             contactId: contact?.id || null,
-            content: text || '',
+            content: text || (mediaUrl ? '[Medya]' : ''),
+            mediaUrl,
             status: fromMe ? 'SENT' : 'DELIVERED',
             evolutionMessageId: evoMsgId,
             sentAt: new Date(),

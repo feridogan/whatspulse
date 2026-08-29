@@ -11,10 +11,11 @@ const httpsAgent = new https.Agent({
 });
 
 /**
- * Extracts and strictly normalizes phone number from an Evolution API contact/chat object.
+ * Extracts and strictly normalizes phone number from an Evolution API contact/chat/participant object.
  * Discards WhatsApp Multi-Device LID identifiers (e.g. 524..., 549... with 11-16 digits).
  */
 function extractValidPhoneNumber(item: any): string | null {
+  if (!item) return null;
   const candidates = [
     item.phoneNumber,
     item.number,
@@ -105,13 +106,13 @@ export async function POST() {
     await prisma.group.deleteMany({});
     console.log("Mevcut WhatsPulse kişi ve grupları başarıyla sıfırlandı.");
 
-    // 2. Fetch contacts, chats, and groups with fallbacks
+    // 2. Fetch contacts, chats, and groups WITH participants (getParticipants=true)
     const [contactsRes, chatsRes, groupsRes] = await Promise.allSettled([
       axios.post(`${baseURL}/chat/findContacts/${encodeURIComponent(instanceName)}`, { where: {}, limit: 5000 }, { headers, httpsAgent, timeout: 25000 }),
       axios.post(`${baseURL}/chat/findChats/${encodeURIComponent(instanceName)}`, { where: {}, limit: 5000 }, { headers, httpsAgent, timeout: 25000 }).catch(() => 
         axios.get(`${baseURL}/chat/findChats/${encodeURIComponent(instanceName)}`, { headers, httpsAgent, timeout: 25000 })
       ),
-      axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=false`, { headers, httpsAgent, timeout: 25000 }).catch(() =>
+      axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=true`, { headers, httpsAgent, timeout: 25000 }).catch(() =>
         axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}`, { headers, httpsAgent, timeout: 25000 })
       )
     ]);
@@ -136,76 +137,13 @@ export async function POST() {
 
     console.log(`[Sync Gelen] Ham Kişi: ${rawContacts.length}, Sohbet: ${rawChats.length}, Grup: ${rawGroups.length}`);
 
-    // 3. Process and save Groups (both from fetchAllGroups and findChats @g.us)
-    const allGroupCandidates = [...rawGroups];
-    for (const ch of rawChats) {
-      const jid = String(ch.id || ch.remoteJid || ch.jid || '');
-      if (jid.includes('@g.us')) {
-        allGroupCandidates.push(ch);
-      }
-    }
-
-    const cleanGroups: Array<{ name: string; description: string; color: string }> = [];
-    const usedGroupNames = new Map<string, boolean>();
-    const seenGroupJids = new Map<string, boolean>();
-
-    for (const g of allGroupCandidates) {
-      const jid = String(g.id || g.remoteJid || g.jid || '').trim();
-      if (!jid || !jid.includes('@g.us')) continue;
-      if (seenGroupJids.has(jid)) continue;
-      seenGroupJids.set(jid, true);
-
-      let gName = (g.subject || g.name || '').trim();
-      if (!gName) {
-        gName = `WhatsApp Grubu (${jid.slice(0, 8)})`;
-      }
-
-      // Handle duplicate names gracefully
-      if (usedGroupNames.has(gName.toLowerCase())) {
-        gName = `${gName} (${jid.slice(-4)})`;
-      }
-      usedGroupNames.set(gName.toLowerCase(), true);
-
-      const memberCount = Number(g.size || (g.participants ? g.participants.length : 0)) || 0;
-      const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
-
-      cleanGroups.push({
-        name: gName,
-        description: `WhatsApp Grubu${sizeText} - JID: ${jid}`,
-        color: '#128C7E',
-      });
-
-      // Also ensure Group Chat exists in Chat table
-      await prisma.chat.upsert({
-        where: { phone: jid },
-        update: {
-          contactName: gName,
-          isGroup: true,
-        },
-        create: {
-          phone: jid,
-          contactName: gName,
-          lastMessage: 'Grup Sohbeti',
-          lastMessageTime: new Date(),
-          unreadCount: 0,
-          isGroup: true,
-        },
-      }).catch(() => {});
-    }
-
-    if (cleanGroups.length > 0) {
-      await prisma.group.createMany({ data: cleanGroups, skipDuplicates: true });
-    }
-
-    // 4. Process and save Contacts (both rawContacts and rawChats)
+    // 3. Process and save Contacts first (from rawContacts & rawChats)
     const combinedList = [...rawContacts, ...rawChats];
     const contactMap = new Map<string, { name: string; phone: string; email?: string; notes?: string }>();
 
     for (const item of combinedList) {
       const validPhone = extractValidPhoneNumber(item);
-      if (!validPhone) {
-        continue;
-      }
+      if (!validPhone) continue;
 
       const cleanDigits = normalizePhone(validPhone);
       const phone = `+${cleanDigits}`;
@@ -246,24 +184,129 @@ export async function POST() {
     }
 
     const cleanContacts = Array.from(contactMap.values());
-
-    // 500'erli bloklar halinde toplu kaydet
     const CHUNK_SIZE = 500;
     for (let i = 0; i < cleanContacts.length; i += CHUNK_SIZE) {
       const chunk = cleanContacts.slice(i, i + CHUNK_SIZE);
       await prisma.contact.createMany({ data: chunk, skipDuplicates: true });
     }
 
-    console.log(`[Sync Tamamlandı] Kaydedilen Toplam Kişi: ${cleanContacts.length}, Grup: ${cleanGroups.length}`);
+    // Index created contacts by phone for quick lookup
+    const allSavedContacts = await prisma.contact.findMany();
+    const contactByPhoneMap = new Map<string, string>();
+    allSavedContacts.forEach((c) => {
+      contactByPhoneMap.set(c.phone, c.id);
+      contactByPhoneMap.set(normalizePhone(c.phone), c.id);
+    });
 
-    const message = `Senkronizasyon Başarılı: ${cleanContacts.length.toLocaleString('tr-TR')} Kişi ve ${cleanGroups.length} Grup yüklendi.`;
+    // 4. Process and save Groups and link Group Participants
+    const allGroupCandidates = [...rawGroups];
+    for (const ch of rawChats) {
+      const jid = String(ch.id || ch.remoteJid || ch.jid || '');
+      if (jid.includes('@g.us')) {
+        allGroupCandidates.push(ch);
+      }
+    }
+
+    const usedGroupNames = new Map<string, boolean>();
+    const seenGroupJids = new Map<string, boolean>();
+    let totalGroupsSaved = 0;
+
+    for (const g of allGroupCandidates) {
+      const jid = String(g.id || g.remoteJid || g.jid || '').trim();
+      if (!jid || !jid.includes('@g.us')) continue;
+      if (seenGroupJids.has(jid)) continue;
+      seenGroupJids.set(jid, true);
+
+      let gName = (g.subject || g.name || '').trim();
+      if (!gName) {
+        gName = `WhatsApp Grubu (${jid.slice(0, 8)})`;
+      }
+
+      if (usedGroupNames.has(gName.toLowerCase())) {
+        gName = `${gName} (${jid.slice(-4)})`;
+      }
+      usedGroupNames.set(gName.toLowerCase(), true);
+
+      const participants = Array.isArray(g.participants) ? g.participants : [];
+      const memberCount = Number(g.size || participants.length) || 0;
+      const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
+
+      const createdGroup = await prisma.group.create({
+        data: {
+          name: gName,
+          description: `WhatsApp Grubu${sizeText} - JID: ${jid}`,
+          color: '#128C7E',
+        },
+      });
+      totalGroupsSaved++;
+
+      // Link group participants in ContactGroup
+      const contactGroupEntries: Array<{ contactId: string; groupId: string }> = [];
+
+      for (const p of participants) {
+        const validPPhone = extractValidPhoneNumber(p);
+        if (!validPPhone) continue;
+
+        const pCleanDigits = normalizePhone(validPPhone);
+        const pPhone = `+${pCleanDigits}`;
+
+        let contactId = contactByPhoneMap.get(pPhone) || contactByPhoneMap.get(pCleanDigits);
+        if (!contactId) {
+          // Create new contact for participant if not exists
+          const newContact = await prisma.contact.create({
+            data: {
+              phone: pPhone,
+              name: formatPhoneDisplay(pPhone),
+              email: `${pCleanDigits}@whatsapp.local`,
+              notes: `${gName} grubu katılımcısı`,
+            },
+          });
+          contactId = newContact.id;
+          contactByPhoneMap.set(pPhone, contactId);
+          contactByPhoneMap.set(pCleanDigits, contactId);
+        }
+
+        contactGroupEntries.push({
+          contactId,
+          groupId: createdGroup.id,
+        });
+      }
+
+      if (contactGroupEntries.length > 0) {
+        await prisma.contactGroup.createMany({
+          data: contactGroupEntries,
+          skipDuplicates: true,
+        }).catch(() => {});
+      }
+
+      // Also ensure Group Chat exists in Chat table
+      await prisma.chat.upsert({
+        where: { phone: jid },
+        update: {
+          contactName: gName,
+          isGroup: true,
+        },
+        create: {
+          phone: jid,
+          contactName: gName,
+          lastMessage: 'Grup Sohbeti',
+          lastMessageTime: new Date(),
+          unreadCount: 0,
+          isGroup: true,
+        },
+      }).catch(() => {});
+    }
+
+    console.log(`[Sync Tamamlandı] Kaydedilen Toplam Kişi: ${cleanContacts.length}, Grup: ${totalGroupsSaved}`);
+
+    const message = `Senkronizasyon Başarılı: ${cleanContacts.length.toLocaleString('tr-TR')} Kişi ve ${totalGroupsSaved} Grup katılımcılarıyla birlikte yüklendi.`;
 
     return NextResponse.json({
       success: true,
       totalContacts: cleanContacts.length,
-      totalGroups: cleanGroups.length,
+      totalGroups: totalGroupsSaved,
       contactsCount: cleanContacts.length,
-      groupsCount: cleanGroups.length,
+      groupsCount: totalGroupsSaved,
       message,
     });
 
