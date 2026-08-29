@@ -181,6 +181,35 @@ export class EvolutionService {
   }
 
   /**
+   * Fetch message history for a specific chat remoteJid from Evolution API
+   */
+  static async findMessages(remoteJid: string, limit = 50, customName?: string) {
+    try {
+      const { client, instance } = await getClient(customName);
+      const res = await client.post(
+        `/chat/findMessages/${encodeURIComponent(instance)}`,
+        {
+          where: {
+            key: {
+              remoteJid,
+            },
+          },
+          limit,
+        },
+        { timeout: 15000 }
+      );
+      let data = res.data;
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        data = data.messages || data.data || data.items || [];
+      }
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.warn('[Evolution API findMessages Warn]:', err.response?.data || err.message);
+      return [];
+    }
+  }
+
+  /**
    * Send WhatsApp text or media message
    */
   static async sendMessage(
