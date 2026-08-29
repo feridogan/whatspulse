@@ -2,6 +2,9 @@ node_modules
 .next
 .git
 .gitignore
+quran*
+bot*
+scripts
 *.log
 .DS_Store
 dist
