@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export const metadata: Metadata = {
   title: 'WhatsPulse - WhatsApp Mesaj & CRM SaaS',
   description: 'Mobil Öncelikli Kurumsal WhatsApp İletişim, Şablon ve Anti-Ban Kampanya Platformu',
