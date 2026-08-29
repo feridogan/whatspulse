@@ -12,10 +12,11 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^5.18.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.16.5",
+    "@types/pg": "^8.11.8",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
@@ -28,8 +29,8 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.439.0",
     "next": "14.2.8",
+    "pg": "^8.12.0",
     "postcss": "^8.4.45",
-    "prisma": "^5.19.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.2",
@@ -37,11 +38,12 @@
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
-    "pg": "^8.12.0",
-    "@types/pg": "^8.11.8",
     "xlsx": "^0.18.5"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
   }
 }

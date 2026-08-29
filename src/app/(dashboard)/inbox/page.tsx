@@ -204,7 +204,8 @@ function InboxContent() {
                   className={`w-full text-left p-3.5 flex items-center justify-between gap-3 transition-colors ${
                     isSelected ? 'bg-[#202c33]' : 'hover:bg-[#202c33]/50'
                   }`}
-                                   <div className="flex items-center gap-3 overflow-hidden">
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
                       {(chat.displayName || chat.contactName || chat.phone).charAt(0).toUpperCase()}
                     </div>
@@ -275,7 +276,7 @@ function InboxContent() {
                   </div>
                   <div className="text-[11px] text-emerald-400 font-mono">{formatPhoneDisplay(activePhone)}</div>
                 </div>
-              </div>   </div>
+              </div>
 
               {/* Chat Actions */}
               <div className="flex items-center gap-2">
