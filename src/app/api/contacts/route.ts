@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || '';
     const groupId = searchParams.get('groupId') || '';
     const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const limit = parseInt(searchParams.get('limit') || '500', 10);
     const skip = (page - 1) * limit;
 
     const where: any = {};

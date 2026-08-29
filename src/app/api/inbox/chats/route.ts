@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = (searchParams.get('search') || '').toLowerCase().trim();
 
-    // 1. Fetch all local contacts from DB to map names & groups
+    // 1. Fetch all local contacts from DB
     const contacts = await prisma.contact.findMany({
       include: {
         groups: {
@@ -42,12 +42,12 @@ export async function GET(req: NextRequest) {
     // 3. Fetch local active chats from database
     const dbChats = await prisma.chat.findMany({
       orderBy: { lastMessageTime: 'desc' },
-      take: 200,
+      take: 300,
     });
 
     const processedMap = new Map<string, any>();
 
-    // A. Process live Evolution chats first (has actual recent WhatsApp conversation timestamps)
+    // A. Process live Evolution chats (has real WhatsApp conversation timestamps)
     for (const ec of evoChats) {
       const rawJid = String(ec.id || ec.remoteJid || ec.jid || '').trim();
       if (!rawJid || rawJid.includes('@broadcast') || rawJid.includes('@newsletter') || rawJid.startsWith('status@')) {
@@ -56,10 +56,26 @@ export async function GET(req: NextRequest) {
 
       const isGroup = rawJid.includes('@g.us');
 
-      // Timestamp conversion from WhatsApp UNIX seconds
-      const tsRaw = ec.conversationTimestamp || ec.lastMsgTimestamp || ec.updatedAt;
-      const lastTime = tsRaw ? new Date(Number(tsRaw) * (String(tsRaw).length <= 10 ? 1000 : 1)) : new Date();
-      const validTime = isNaN(lastTime.getTime()) ? new Date() : lastTime;
+      // Accurate timestamp parsing
+      const tsRaw =
+        ec.conversationTimestamp ||
+        ec.lastMsgTimestamp ||
+        ec.lastMessage?.messageTimestamp ||
+        ec.messages?.[0]?.messageTimestamp ||
+        ec.updatedAt;
+
+      let lastTime = new Date(0);
+      if (tsRaw) {
+        if (typeof tsRaw === 'number' || !isNaN(Number(tsRaw))) {
+          const num = Number(tsRaw);
+          lastTime = new Date(num * (String(num).length <= 10 ? 1000 : 1));
+        } else {
+          const parsed = new Date(tsRaw);
+          if (!isNaN(parsed.getTime())) {
+            lastTime = parsed;
+          }
+        }
+      }
 
       const lastMsg =
         typeof ec.lastMessage === 'string'
@@ -81,7 +97,7 @@ export async function GET(req: NextRequest) {
           isGroup: true,
           unreadCount: ec.unreadCount || 0,
           lastMessage: lastMsg || 'Grup Sohbeti',
-          lastMessageTime: validTime,
+          lastMessageTime: lastTime,
           avatar: '👥',
           contact: null,
           groups: [],
@@ -101,6 +117,12 @@ export async function GET(req: NextRequest) {
           const searchName = (ec.name || ec.pushName || ec.verifiedName || '').toLowerCase().trim();
           if (searchName) {
             matchedContact = contactByName.get(searchName);
+            if (!matchedContact) {
+              matchedContact = contacts.find((c) => {
+                const cName = (c.name || '').toLowerCase().trim();
+                return cName && (cName === searchName || cName.includes(searchName) || searchName.includes(cName));
+              });
+            }
           }
         }
 
@@ -137,7 +159,7 @@ export async function GET(req: NextRequest) {
           isGroup: false,
           unreadCount: ec.unreadCount || 0,
           lastMessage: lastMsg || 'Sohbet',
-          lastMessageTime: validTime,
+          lastMessageTime: lastTime,
           avatar: displayName.charAt(0).toUpperCase(),
           contact: matchedContact || null,
           groups: matchedContact?.groups?.map((g: any) => g.group) || [],
@@ -166,7 +188,7 @@ export async function GET(req: NextRequest) {
             isGroup: true,
             unreadCount: dc.unreadCount || 0,
             lastMessage: dc.lastMessage || 'Grup Sohbeti',
-            lastMessageTime: dc.lastMessageTime || new Date(),
+            lastMessageTime: dc.lastMessageTime || new Date(0),
             avatar: '👥',
             contact: null,
             groups: [],
@@ -203,13 +225,13 @@ export async function GET(req: NextRequest) {
             isGroup: false,
             unreadCount: dc.unreadCount || 0,
             lastMessage: dc.lastMessage || 'Sohbet',
-            lastMessageTime: dc.lastMessageTime || new Date(),
+            lastMessageTime: dc.lastMessageTime || new Date(0),
             avatar: displayName.charAt(0).toUpperCase(),
             contact: matchedContact || null,
             groups: matchedContact?.groups?.map((g: any) => g.group) || [],
           });
         } else {
-          // If already in map from Evolution, update lastMessage if local is newer
+          // If already in map, update timestamp if DB has a newer message
           const existing = processedMap.get(phone);
           if (dc.lastMessageTime && new Date(dc.lastMessageTime).getTime() > new Date(existing.lastMessageTime).getTime()) {
             existing.lastMessage = dc.lastMessage || existing.lastMessage;
@@ -249,7 +271,7 @@ export async function GET(req: NextRequest) {
           isGroup: false,
           unreadCount: 0,
           lastMessage: 'Sohbet başlat',
-          lastMessageTime: new Date(0), // Place contacts without chat activity below active conversations
+          lastMessageTime: new Date(0),
           avatar: displayName.charAt(0).toUpperCase(),
           contact: c,
           groups: c.groups?.map((g: any) => g.group) || [],
@@ -257,7 +279,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Convert to sorted array strictly by lastMessageTime descending (active WhatsApp chats first!)
+    // Convert to array and sort strictly by lastMessageTime descending
     let allChats = Array.from(processedMap.values()).sort(
       (a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     );
