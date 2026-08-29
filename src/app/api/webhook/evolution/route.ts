@@ -4,19 +4,27 @@ import { normalizePhone, formatPhoneNumber, formatPhoneDisplay } from '@/lib/uti
 
 export async function POST(req: NextRequest) {
   try {
-    const payload = await req.json();
+    const payload = await req.json().catch(() => ({}));
     const event = (payload.event || payload.type || '').toUpperCase();
     const data = payload.data || payload;
 
     console.log(`[Webhook] 🔔 Received Evolution event: ${event}`);
 
-    // 1. Handle Incoming Messages (MESSAGES_UPSERT)
-    if (event === 'MESSAGES_UPSERT' || event === 'MESSAGES.UPSERT' || event === 'MESSAGE_UPSERT') {
-      const messageData = data.message || data;
-      const key = data.key || messageData.key || {};
-      const fromMe = key.fromMe === true;
+    // Handle MESSAGES_UPSERT, MESSAGES.UPSERT, SEND_MESSAGE, etc.
+    const isUpsert =
+      event === 'MESSAGES_UPSERT' ||
+      event === 'MESSAGES.UPSERT' ||
+      event === 'MESSAGE_UPSERT' ||
+      event === 'SEND_MESSAGE' ||
+      event === 'SEND.MESSAGE' ||
+      Boolean(data.key || payload.key);
 
-      const remoteJid = String(key.remoteJid || messageData.remoteJid || '').trim();
+    if (isUpsert) {
+      const messageData = data.message || payload.message || data;
+      const key = data.key || payload.key || messageData.key || {};
+      const fromMe = Boolean(key.fromMe ?? data.fromMe ?? payload.fromMe ?? false);
+
+      const remoteJid = String(key.remoteJid || messageData.remoteJid || data.remoteJid || payload.remoteJid || '').trim();
       if (!remoteJid || remoteJid.includes('@broadcast') || remoteJid.includes('@newsletter') || remoteJid.startsWith('status@')) {
         return NextResponse.json({ success: true, ignored: 'broadcast/status' });
       }
@@ -28,7 +36,11 @@ export async function POST(req: NextRequest) {
       if (isGroup) {
         phone = remoteJid;
       } else {
-        cleanDigits = normalizePhone(remoteJid);
+        cleanDigits = normalizePhone(remoteJid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, ''));
+        // Ignore fake LID starting with 524... or 525... with length >= 13
+        if (cleanDigits.startsWith('52') && cleanDigits.length >= 13) {
+          return NextResponse.json({ success: true, ignored: 'lid' });
+        }
         if (!cleanDigits || cleanDigits.length < 10) {
           return NextResponse.json({ success: true, ignored: 'invalid-phone' });
         }
@@ -98,6 +110,7 @@ export async function POST(req: NextRequest) {
           OR: [
             { phone },
             { phone: cleanDigits },
+            { phone: `+${cleanDigits}` },
           ],
         },
       });
@@ -144,6 +157,16 @@ export async function POST(req: NextRequest) {
             },
           });
         }
+      } else {
+        await prisma.chatMessage.create({
+          data: {
+            chatId: chat.id,
+            sender: fromMe ? 'OUTGOING' : 'INCOMING',
+            content: text || '',
+            status: fromMe ? 'SENT' : 'DELIVERED',
+            timestamp: new Date(),
+          },
+        });
       }
 
       // Also record in Message table

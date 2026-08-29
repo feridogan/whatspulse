@@ -15,6 +15,12 @@ export async function GET(req: NextRequest) {
     const targetInstance = instance || config.instanceName;
     const result = await EvolutionService.getConnectionState(targetInstance);
 
+    if (result.isOpen) {
+      EvolutionService.configureWebhook('https://mesaj.cakirlar.net/api/webhook', targetInstance).catch((e) => {
+        console.warn('[Auto-Webhook Warning]:', e.message);
+      });
+    }
+
     return NextResponse.json({
       success: result.success,
       state: result.state,
