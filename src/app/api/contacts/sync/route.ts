@@ -15,7 +15,6 @@ const httpsAgent = new https.Agent({
  * Discards WhatsApp Multi-Device LID identifiers (e.g. 524..., 549... with 11-16 digits).
  */
 function extractValidPhoneNumber(item: any): string | null {
-  // Check fields in priority order for real phone numbers
   const candidates = [
     item.phoneNumber,
     item.number,
@@ -63,7 +62,6 @@ function extractValidPhoneNumber(item: any): string | null {
     }
 
     // 5. Detect WhatsApp LID identifiers (starts with 52, 54, 55 with length 11, 13, 14, 15, 16):
-    // These are internal Baileys/WhatsApp device IDs, NOT real phone numbers. Skip them!
     if (
       (digits.startsWith('52') || digits.startsWith('54') || digits.startsWith('55')) &&
       digits.length !== 10 &&
@@ -83,7 +81,6 @@ function extractValidPhoneNumber(item: any): string | null {
 
 export async function POST() {
   try {
-    // 0. Güncel Evolution API Konfigürasyonunu Oku
     const config = await getEvolutionConfig();
     const baseURL = config.apiUrl.replace(/\/$/, '');
     const instanceName = config.instanceName || 'ff';
@@ -97,19 +94,26 @@ export async function POST() {
 
     console.log(`[Sync] Evolution API bağlantısı başlatılıyor: ${baseURL}/chat/findContacts/${instanceName}`);
 
-    // 1. WhatsPulse Tablolarını Sıfırla (Hard Reset)
+    // Auto-configure Webhook on Evolution API
+    EvolutionService.configureWebhook('https://mesaj.cakirlar.net/api/webhook', instanceName).catch((e) => {
+      console.warn('[Sync Auto-Webhook Warning]:', e.message);
+    });
+
+    // 1. Reset old data
     await prisma.contactGroup.deleteMany({}).catch(() => {});
     await prisma.contact.deleteMany({});
     await prisma.group.deleteMany({});
     console.log("Mevcut WhatsPulse kişi ve grupları başarıyla sıfırlandı.");
 
-    // 2. Kişileri ve Grupları Evolution API'den Çek (5000 Limit ile Tam Liste)
+    // 2. Fetch contacts, chats, and groups with fallbacks
     const [contactsRes, chatsRes, groupsRes] = await Promise.allSettled([
       axios.post(`${baseURL}/chat/findContacts/${encodeURIComponent(instanceName)}`, { where: {}, limit: 5000 }, { headers, httpsAgent, timeout: 25000 }),
       axios.post(`${baseURL}/chat/findChats/${encodeURIComponent(instanceName)}`, { where: {}, limit: 5000 }, { headers, httpsAgent, timeout: 25000 }).catch(() => 
         axios.get(`${baseURL}/chat/findChats/${encodeURIComponent(instanceName)}`, { headers, httpsAgent, timeout: 25000 })
       ),
-      axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=false`, { headers, httpsAgent, timeout: 25000 })
+      axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=false`, { headers, httpsAgent, timeout: 25000 }).catch(() =>
+        axios.get(`${baseURL}/group/fetchAllGroups/${encodeURIComponent(instanceName)}`, { headers, httpsAgent, timeout: 25000 })
+      )
     ]);
 
     let rawContacts = contactsRes.status === 'fulfilled' ? contactsRes.value.data : [];
@@ -132,61 +136,80 @@ export async function POST() {
 
     console.log(`[Sync Gelen] Ham Kişi: ${rawContacts.length}, Sohbet: ${rawChats.length}, Grup: ${rawGroups.length}`);
 
-    // 3. Grupları Ayrıştır ve Kaydet
-    const cleanGroups: Array<{ name: string; description: string; color: string }> = [];
-    const groupMap = new Map<string, boolean>();
-
-    for (const g of rawGroups) {
-      const gName = (g.subject || g.name || 'WhatsApp Grubu').trim();
-      const normalizedKey = gName.toLowerCase();
-      if (gName && !groupMap.has(normalizedKey)) {
-        groupMap.set(normalizedKey, true);
-        const memberCount = Number(g.size || (g.participants ? g.participants.length : 0)) || 0;
-        const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
-        cleanGroups.push({
-          name: gName,
-          description: `WhatsApp Grubu${sizeText} - JID: ${g.id || g.jid || ''}`,
-          color: '#128C7E',
-        });
-      }
-    }
-
-    // Ayrıca chats içindeki @g.us gruplarını topla
+    // 3. Process and save Groups (both from fetchAllGroups and findChats @g.us)
+    const allGroupCandidates = [...rawGroups];
     for (const ch of rawChats) {
       const jid = String(ch.id || ch.remoteJid || ch.jid || '');
       if (jid.includes('@g.us')) {
-        const gName = (ch.name || ch.subject || 'WhatsApp Grubu').trim();
-        const normalizedKey = gName.toLowerCase();
-        if (gName && !groupMap.has(normalizedKey)) {
-          groupMap.set(normalizedKey, true);
-          cleanGroups.push({
-            name: gName,
-            description: `WhatsApp Grubu - JID: ${jid}`,
-            color: '#128C7E',
-          });
-        }
+        allGroupCandidates.push(ch);
       }
+    }
+
+    const cleanGroups: Array<{ name: string; description: string; color: string }> = [];
+    const usedGroupNames = new Map<string, boolean>();
+    const seenGroupJids = new Map<string, boolean>();
+
+    for (const g of allGroupCandidates) {
+      const jid = String(g.id || g.remoteJid || g.jid || '').trim();
+      if (!jid || !jid.includes('@g.us')) continue;
+      if (seenGroupJids.has(jid)) continue;
+      seenGroupJids.set(jid, true);
+
+      let gName = (g.subject || g.name || '').trim();
+      if (!gName) {
+        gName = `WhatsApp Grubu (${jid.slice(0, 8)})`;
+      }
+
+      // Handle duplicate names gracefully
+      if (usedGroupNames.has(gName.toLowerCase())) {
+        gName = `${gName} (${jid.slice(-4)})`;
+      }
+      usedGroupNames.set(gName.toLowerCase(), true);
+
+      const memberCount = Number(g.size || (g.participants ? g.participants.length : 0)) || 0;
+      const sizeText = memberCount > 0 ? ` (${memberCount} Katılımcı)` : '';
+
+      cleanGroups.push({
+        name: gName,
+        description: `WhatsApp Grubu${sizeText} - JID: ${jid}`,
+        color: '#128C7E',
+      });
+
+      // Also ensure Group Chat exists in Chat table
+      await prisma.chat.upsert({
+        where: { phone: jid },
+        update: {
+          contactName: gName,
+          isGroup: true,
+        },
+        create: {
+          phone: jid,
+          contactName: gName,
+          lastMessage: 'Grup Sohbeti',
+          lastMessageTime: new Date(),
+          unreadCount: 0,
+          isGroup: true,
+        },
+      }).catch(() => {});
     }
 
     if (cleanGroups.length > 0) {
       await prisma.group.createMany({ data: cleanGroups, skipDuplicates: true });
     }
 
-    // 4. Kişileri Ayrıştır, Doğrula, Numaralandır ve Tekilleştir
+    // 4. Process and save Contacts (both rawContacts and rawChats)
     const combinedList = [...rawContacts, ...rawChats];
     const contactMap = new Map<string, { name: string; phone: string; email?: string; notes?: string }>();
 
     for (const item of combinedList) {
       const validPhone = extractValidPhoneNumber(item);
       if (!validPhone) {
-        // Discard invalid items or fake LID numbers
         continue;
       }
 
       const cleanDigits = normalizePhone(validPhone);
       const phone = `+${cleanDigits}`;
 
-      // İsim kontrolü
       const rawName = (
         item.pushName ||
         item.name ||

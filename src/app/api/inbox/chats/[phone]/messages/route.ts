@@ -49,7 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       include: {
         messages: {
           orderBy: { timestamp: 'asc' },
-          take: 250,
+          take: 300,
         },
       },
     });
@@ -60,7 +60,9 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       realName &&
       realName !== phone &&
       realName !== cleanDigits &&
-      realName.replace(/\D/g, '') !== cleanDigits
+      realName.replace(/\D/g, '') !== cleanDigits &&
+      !realName.startsWith('+52') &&
+      !realName.startsWith('+54')
     );
     const finalName = hasRealName ? realName : isGroup ? realName : formatPhoneDisplay(phone);
 
@@ -87,7 +89,7 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
 
     // 3. Fetch recent messages directly from Evolution API v2 (POST /chat/findMessages/ff)
     try {
-      const evoMessages = await EvolutionService.findMessages(remoteJid, 50);
+      const evoMessages = await EvolutionService.findMessages(remoteJid, 100);
       if (Array.isArray(evoMessages) && evoMessages.length > 0) {
         for (const item of evoMessages) {
           const key = item.key || {};

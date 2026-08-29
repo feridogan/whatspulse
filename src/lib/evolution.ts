@@ -165,10 +165,18 @@ export class EvolutionService {
   /**
    * Fetch all groups from Evolution API
    */
+  /**
+   * Fetch all groups from Evolution API
+   */
   static async fetchGroups(customName?: string) {
     try {
       const { client, instance } = await getClient(customName);
-      const res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}?getParticipants=false`, { timeout: 25000 });
+      let res;
+      try {
+        res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}?getParticipants=false`, { timeout: 25000 });
+      } catch {
+        res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}`, { timeout: 25000 });
+      }
       let data = res.data;
       if (data && typeof data === 'object' && !Array.isArray(data)) {
         data = data.groups || data.data || data.items || [];
@@ -183,24 +191,38 @@ export class EvolutionService {
   /**
    * Fetch message history for a specific chat remoteJid from Evolution API
    */
-  static async findMessages(remoteJid: string, limit = 50, customName?: string) {
+  static async findMessages(remoteJid: string, limit = 100, customName?: string) {
     try {
       const { client, instance } = await getClient(customName);
-      const res = await client.post(
-        `/chat/findMessages/${encodeURIComponent(instance)}`,
-        {
-          where: {
-            key: {
+      let res;
+      try {
+        res = await client.post(
+          `/chat/findMessages/${encodeURIComponent(instance)}`,
+          {
+            where: {
+              key: {
+                remoteJid,
+              },
+            },
+            limit,
+          },
+          { timeout: 15000 }
+        );
+      } catch {
+        res = await client.post(
+          `/chat/findMessages/${encodeURIComponent(instance)}`,
+          {
+            where: {
               remoteJid,
             },
+            limit,
           },
-          limit,
-        },
-        { timeout: 15000 }
-      );
+          { timeout: 15000 }
+        );
+      }
       let data = res.data;
       if (data && typeof data === 'object' && !Array.isArray(data)) {
-        data = data.messages || data.data || data.items || [];
+        data = data.messages || data.data || data.items || data.records || [];
       }
       return Array.isArray(data) ? data : [];
     } catch (err: any) {
@@ -259,12 +281,13 @@ export class EvolutionService {
   /**
    * Configure Webhook in Evolution API v2 standard
    */
-  static async configureWebhook(webhookUrl: string, customName?: string) {
+  static async configureWebhook(webhookUrl?: string, customName?: string) {
     const { client, instance } = await getClient(customName);
+    const targetUrl = webhookUrl || 'https://mesaj.cakirlar.net/api/webhook';
     const payload = {
       webhook: {
         enabled: true,
-        url: webhookUrl,
+        url: targetUrl,
         byEvents: false,
         base64: false,
         events: [
@@ -274,6 +297,14 @@ export class EvolutionService {
           'CONNECTION_UPDATE',
         ],
       },
+      url: targetUrl,
+      enabled: true,
+      events: [
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'SEND_MESSAGE',
+        'CONNECTION_UPDATE',
+      ],
     };
 
     const res = await client.post(`/webhook/set/${encodeURIComponent(instance)}`, payload);

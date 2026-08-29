@@ -2,33 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber, formatPhoneDisplay } from '@/lib/utils';
 
+function extractMessageItems(payload: any): any[] {
+  if (!payload || typeof payload !== 'object') return [];
+
+  const data = payload.data !== undefined ? payload.data : payload;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (data && Array.isArray(data.messages)) {
+    return data.messages;
+  }
+  if (data && Array.isArray(data.records)) {
+    return data.records;
+  }
+  if (data && (data.key || data.message)) {
+    return [data];
+  }
+  if (payload.key || payload.message) {
+    return [payload];
+  }
+
+  return [];
+}
+
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json().catch(() => ({}));
     const event = (payload.event || payload.type || '').toUpperCase();
-    const data = payload.data || payload;
 
     console.log(`[Webhook] 🔔 Received Evolution event: ${event}`);
 
-    // Handle MESSAGES_UPSERT, MESSAGES.UPSERT, SEND_MESSAGE, etc.
-    const isUpsert =
-      event === 'MESSAGES_UPSERT' ||
-      event === 'MESSAGES.UPSERT' ||
-      event === 'MESSAGE_UPSERT' ||
-      event === 'SEND_MESSAGE' ||
-      event === 'SEND.MESSAGE' ||
-      Boolean(data.key || payload.key);
+    const messageItems = extractMessageItems(payload);
 
-    if (isUpsert) {
-      const messageData = data.message || payload.message || data;
-      const key = data.key || payload.key || messageData.key || {};
-      const fromMe = Boolean(key.fromMe ?? data.fromMe ?? payload.fromMe ?? false);
-
-      const remoteJid = String(key.remoteJid || messageData.remoteJid || data.remoteJid || payload.remoteJid || '').trim();
+    // 1. Process Messages (Upsert / Incoming / Outgoing)
+    for (const item of messageItems) {
+      const key = item.key || {};
+      const remoteJid = String(key.remoteJid || item.remoteJid || '').trim();
       if (!remoteJid || remoteJid.includes('@broadcast') || remoteJid.includes('@newsletter') || remoteJid.startsWith('status@')) {
-        return NextResponse.json({ success: true, ignored: 'broadcast/status' });
+        continue;
       }
 
+      const fromMe = Boolean(key.fromMe ?? item.fromMe ?? false);
       const isGroup = remoteJid.includes('@g.us');
       let phone = '';
       let cleanDigits = '';
@@ -37,19 +52,19 @@ export async function POST(req: NextRequest) {
         phone = remoteJid;
       } else {
         cleanDigits = normalizePhone(remoteJid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, ''));
-        // Ignore fake LID starting with 524... or 525... with length >= 13
         if (cleanDigits.startsWith('52') && cleanDigits.length >= 13) {
-          return NextResponse.json({ success: true, ignored: 'lid' });
+          // Skip raw internal LID without phone
+          continue;
         }
         if (!cleanDigits || cleanDigits.length < 10) {
-          return NextResponse.json({ success: true, ignored: 'invalid-phone' });
+          continue;
         }
         phone = `+${cleanDigits}`;
       }
 
-      // Extract text content
-      const msgObj = messageData.message || messageData;
-      let text =
+      // Extract message text
+      const msgObj = item.message || item;
+      const text =
         msgObj.conversation ||
         msgObj.extendedTextMessage?.text ||
         msgObj.imageMessage?.caption ||
@@ -60,7 +75,7 @@ export async function POST(req: NextRequest) {
         (msgObj.audioMessage ? '[Ses Kaydı]' : '') ||
         '';
 
-      const pushName = (data.pushName || payload.pushName || '').trim();
+      const pushName = (item.pushName || payload.pushName || '').trim();
 
       // Anti-Ban & Compliance: Check for Opt-Out / Blacklist keywords
       const upperText = text.trim().toUpperCase();
@@ -185,7 +200,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Handle Message Status Updates (MESSAGES_UPDATE - Delivery / Read Receipts)
-    if (event === 'MESSAGES_UPDATE' || event === 'MESSAGES.UPDATE') {
+    if (event.includes('UPDATE')) {
+      const data = payload.data || payload;
       const updates = Array.isArray(data) ? data : [data];
 
       for (const item of updates) {
