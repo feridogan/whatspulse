@@ -137,14 +137,14 @@ function InboxContent() {
   useEffect(() => {
     loadChats();
     loadTemplates();
-    const interval = setInterval(loadChats, 10000);
+    const interval = setInterval(loadChats, 4000);
     return () => clearInterval(interval);
   }, [searchQuery]);
 
   useEffect(() => {
     if (activePhone) {
       loadMessages(activePhone);
-      const interval = setInterval(() => loadMessages(activePhone), 6000);
+      const interval = setInterval(() => loadMessages(activePhone), 2500);
       return () => clearInterval(interval);
     }
   }, [activePhone]);
