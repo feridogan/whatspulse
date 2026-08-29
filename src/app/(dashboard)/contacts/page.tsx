@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   ShieldCheck
 } from 'lucide-react';
+import { formatPhoneDisplay } from '@/lib/utils';
 
 export default function ContactsPage() {
   const router = useRouter();
@@ -430,7 +431,7 @@ export default function ContactsPage() {
                           </div>
                         </td>
                         <td className="p-4 font-mono text-gray-300">
-                          +{c.phone}
+                          {formatPhoneDisplay(c.phone)}
                         </td>
                         <td className="p-4 hidden sm:table-cell">
                           <div className="flex flex-wrap gap-1">
@@ -483,36 +484,43 @@ export default function ContactsPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {groups.map((g) => (
-              <div key={g.id} className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-bold text-white flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || '#10b981' }} />
-                      {g.name}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
-                      {g._count?.contacts || 0} Kişi
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 leading-relaxed">
-                    {g.description || 'Açıklama girilmemiş.'}
-                  </p>
-                </div>
+            {groups.map((g) => {
+              const countMatch = g.description?.match(/\((\d+)\s+Katılımcı\)/);
+              const badgeText = (g._count?.contacts && g._count.contacts > 0) 
+                ? `${g._count.contacts} Kişi` 
+                : countMatch ? `${countMatch[1]} Katılımcı` : 'WhatsApp Grubu';
 
-                <div className="mt-4 pt-3 border-t border-gray-800/80 flex items-center justify-between text-xs">
-                  <button
-                    onClick={() => {
-                      setSelectedGroup(g.id);
-                      setActiveTab('contacts');
-                    }}
-                    className="text-emerald-400 hover:underline font-medium"
-                  >
-                    Kişileri Listele →
-                  </button>
+              return (
+                <div key={g.id} className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                  <div>
+                    <div className="flex items-center justify-between mb-2 gap-2">
+                      <span className="text-sm font-bold text-white flex items-center gap-2 truncate">
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color || '#10b981' }} />
+                        <span className="truncate">{g.name}</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold shrink-0">
+                        {badgeText}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed break-all">
+                      {g.description || 'WhatsApp Grubu'}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-800/80 flex items-center justify-between text-xs">
+                    <button
+                      onClick={() => {
+                        setSelectedGroup(g.id);
+                        setActiveTab('contacts');
+                      }}
+                      className="text-emerald-400 hover:underline font-medium"
+                    >
+                      Kişileri Listele →
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

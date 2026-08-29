@@ -1,25 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
-import { normalizePhone } from '@/lib/utils';
 
 export async function GET(req: NextRequest, { params }: { params: { phone: string } }) {
   try {
     const rawPhone = decodeURIComponent(params.phone);
-    const phone = normalizePhone(rawPhone) || rawPhone;
+    const digits = rawPhone.replace(/^\++/, '').replace(/\D/g, '');
+    const phone = `+${digits}`;
 
-    const chat = await prisma.chat.findUnique({
-      where: { phone },
+    // Find contact info if any
+    const contact = await prisma.contact.findFirst({
+      where: {
+        OR: [
+          { phone: `+${digits}` },
+          { phone: digits },
+          { phone: `++${digits}` },
+        ],
+      },
+      include: {
+        groups: { include: { group: true } },
+      },
+    });
+
+    let chat = await prisma.chat.findFirst({
+      where: {
+        OR: [
+          { phone: `+${digits}` },
+          { phone: digits },
+          { phone: `++${digits}` },
+        ],
+      },
       include: {
         messages: {
           orderBy: { timestamp: 'asc' },
-          take: 150,
+          take: 250,
         },
       },
     });
 
     if (!chat) {
-      return NextResponse.json({ chat: null, messages: [] });
+      return NextResponse.json({
+        chat: {
+          phone,
+          contactName: contact?.name || phone,
+        },
+        contact,
+        messages: [],
+      });
     }
 
     // Reset unread count when opened
@@ -30,16 +57,15 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
       });
     }
 
-    // Find contact info if any
-    const contact = await prisma.contact.findUnique({
-      where: { phone },
-      include: {
-        groups: { include: { group: true } },
-      },
-    });
+    const realName = contact?.name || chat.contactName;
+    const isReal = realName && realName !== phone && realName !== digits;
 
     return NextResponse.json({
-      chat,
+      chat: {
+        ...chat,
+        phone,
+        contactName: isReal ? realName : phone,
+      },
       contact,
       messages: chat.messages,
     });
@@ -51,7 +77,8 @@ export async function GET(req: NextRequest, { params }: { params: { phone: strin
 export async function POST(req: NextRequest, { params }: { params: { phone: string } }) {
   try {
     const rawPhone = decodeURIComponent(params.phone);
-    const phone = normalizePhone(rawPhone) || rawPhone;
+    const digits = rawPhone.replace(/^\++/, '').replace(/\D/g, '');
+    const phone = `+${digits}`;
     const { content, mediaUrl, mediaType = 'text' } = await req.json();
 
     if (!content && !mediaUrl) {
@@ -61,24 +88,42 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
     // Send via Evolution API
     let result: any;
     if (mediaUrl) {
-      result = await EvolutionService.sendMedia(phone, mediaUrl, mediaType, content || '');
+      result = await EvolutionService.sendMessage(phone, content || '', mediaUrl, mediaType);
     } else {
-      result = await EvolutionService.sendText(phone, content);
+      result = await EvolutionService.sendMessage(phone, content);
     }
 
     const evoMsgId = result?.key?.id || result?.messageId || null;
 
-    // Find or create chat
-    let chat = await prisma.chat.findUnique({
-      where: { phone },
+    // Find contact info if any
+    const contact = await prisma.contact.findFirst({
+      where: {
+        OR: [
+          { phone: `+${digits}` },
+          { phone: digits },
+          { phone: `++${digits}` },
+        ],
+      },
     });
 
+    // Find or create chat
+    let chat = await prisma.chat.findFirst({
+      where: {
+        OR: [
+          { phone: `+${digits}` },
+          { phone: digits },
+          { phone: `++${digits}` },
+        ],
+      },
+    });
+
+    const contactName = contact?.name || `+${digits}`;
+
     if (!chat) {
-      const contact = await prisma.contact.findUnique({ where: { phone } });
       chat = await prisma.chat.create({
         data: {
           phone,
-          contactName: contact?.name || `+${phone}`,
+          contactName,
           lastMessage: content || '[Medya]',
           lastMessageTime: new Date(),
           unreadCount: 0,
@@ -88,6 +133,8 @@ export async function POST(req: NextRequest, { params }: { params: { phone: stri
       await prisma.chat.update({
         where: { id: chat.id },
         data: {
+          phone,
+          contactName: contact?.name || chat.contactName,
           lastMessage: content || '[Medya]',
           lastMessageTime: new Date(),
         },

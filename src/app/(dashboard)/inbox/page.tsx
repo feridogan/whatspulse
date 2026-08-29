@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
   User
 } from 'lucide-react';
+import { formatPhoneDisplay } from '@/lib/utils';
 
 function InboxContent() {
   const searchParams = useSearchParams();
@@ -203,14 +204,16 @@ function InboxContent() {
                   className={`w-full text-left p-3.5 flex items-center justify-between gap-3 transition-colors ${
                     isSelected ? 'bg-[#202c33]' : 'hover:bg-[#202c33]/50'
                   }`}
-                >
-                  <div className="flex items-center gap-3 overflow-hidden">
+                                   <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                      {(chat.contactName || chat.phone).charAt(0).toUpperCase()}
+                      {(chat.displayName || chat.contactName || chat.phone).charAt(0).toUpperCase()}
                     </div>
                     <div className="overflow-hidden">
                       <div className="font-semibold text-xs text-white truncate">
-                        {chat.contactName || `+${chat.phone}`}
+                        {chat.displayName || chat.contactName || formatPhoneDisplay(chat.phone)}
+                      </div>
+                      <div className="text-[11px] text-emerald-400/90 font-mono truncate mt-0.5">
+                        {formatPhoneDisplay(chat.phone)}
                       </div>
                       <div className="text-[11px] text-gray-400 truncate mt-0.5">
                         {chat.lastMessage || 'Medya iletildi'}
@@ -258,21 +261,21 @@ function InboxContent() {
                 </button>
 
                 <div className="w-9 h-9 rounded-full bg-emerald-700 flex items-center justify-center text-white font-bold text-xs">
-                  {(activeChat?.chat?.contactName || activePhone).charAt(0).toUpperCase()}
+                  {(activeChat?.contact?.name || activeChat?.chat?.contactName || activePhone).charAt(0).toUpperCase()}
                 </div>
 
                 <div>
                   <div className="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
-                    <span>{activeChat?.chat?.contactName || `+${activePhone}`}</span>
+                    <span>{activeChat?.contact?.name || activeChat?.chat?.contactName || formatPhoneDisplay(activePhone)}</span>
                     {isContactBlacklisted && (
                       <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-400 text-[10px] border border-red-500/30">
                         Kara Liste
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-gray-400">+{activePhone}</div>
+                  <div className="text-[11px] text-emerald-400 font-mono">{formatPhoneDisplay(activePhone)}</div>
                 </div>
-              </div>
+              </div>   </div>
 
               {/* Chat Actions */}
               <div className="flex items-center gap-2">

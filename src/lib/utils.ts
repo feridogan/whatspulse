@@ -11,7 +11,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function normalizePhone(rawPhone: string, defaultCountryCode = '90'): string {
   if (!rawPhone) return '';
-  let cleaned = rawPhone.replace(/\D/g, '');
+  let cleaned = String(rawPhone).replace(/^\++/, '').replace(/\D/g, '');
 
   if (cleaned.startsWith('00')) {
     cleaned = cleaned.substring(2);
@@ -25,11 +25,12 @@ export function normalizePhone(rawPhone: string, defaultCountryCode = '90'): str
 }
 
 export function formatPhoneDisplay(phone: string): string {
-  const p = normalizePhone(phone);
-  if (p.startsWith('90') && p.length === 12) {
-    return `+90 (${p.substring(2, 5)}) ${p.substring(5, 8)} ${p.substring(8, 10)} ${p.substring(10, 12)}`;
+  if (!phone) return '';
+  const digits = normalizePhone(phone);
+  if (digits.startsWith('90') && digits.length === 12) {
+    return `+90 (${digits.substring(2, 5)}) ${digits.substring(5, 8)} ${digits.substring(8, 10)} ${digits.substring(10, 12)}`;
   }
-  return phone.startsWith('+') ? phone : `+${phone}`;
+  return `+${digits}`;
 }
 
 export function replacePlaceholders(template: string, data: Record<string, any>): string {
