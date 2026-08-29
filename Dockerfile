@@ -13,8 +13,9 @@ RUN npm install --include=dev --legacy-peer-deps
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN npx prisma generate
 RUN npm run build
 
