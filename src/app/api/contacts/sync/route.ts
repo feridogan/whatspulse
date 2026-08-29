@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getEvolutionConfig, EvolutionService } from '@/lib/evolution';
+import { normalizePhone, formatPhoneNumber, formatPhoneDisplay } from '@/lib/utils';
 import axios from 'axios';
 import https from 'https';
 
@@ -8,6 +9,77 @@ const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
   keepAlive: true,
 });
+
+/**
+ * Extracts and strictly normalizes phone number from an Evolution API contact/chat object.
+ * Discards WhatsApp Multi-Device LID identifiers (e.g. 524..., 549... with 11-16 digits).
+ */
+function extractValidPhoneNumber(item: any): string | null {
+  // Check fields in priority order for real phone numbers
+  const candidates = [
+    item.phoneNumber,
+    item.number,
+    item.phone,
+    item.user,
+    item.jid,
+    item.remoteJid,
+    item.id,
+  ];
+
+  for (const raw of candidates) {
+    if (!raw || typeof raw !== 'string') continue;
+    const str = raw.trim();
+    if (
+      str.includes('@g.us') ||
+      str.includes('@broadcast') ||
+      str.includes('@newsletter') ||
+      str.includes('@lid') ||
+      str.startsWith('status@')
+    ) {
+      continue;
+    }
+
+    const digits = str.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+    if (!digits || digits.length < 10) continue;
+
+    // 1. Standard Turkish mobile number: 905XXXXXXXXX (12 digits)
+    if (digits.startsWith('905') && digits.length === 12) {
+      return `+${digits}`;
+    }
+
+    // 2. 10-digit Turkish mobile number: 5XXXXXXXXX -> +905XXXXXXXXX
+    if (digits.startsWith('5') && digits.length === 10) {
+      return `+90${digits}`;
+    }
+
+    // 3. 11-digit Turkish mobile number: 05XXXXXXXXX -> +905XXXXXXXXX
+    if (digits.startsWith('05') && digits.length === 11) {
+      return `+90${digits.substring(1)}`;
+    }
+
+    // 4. Standard Turkish fixed / landline: 902XX / 903XX / 904XX / 908XX (12 digits)
+    if (digits.startsWith('90') && digits.length === 12) {
+      return `+${digits}`;
+    }
+
+    // 5. Detect WhatsApp LID identifiers (starts with 52, 54, 55 with length 11, 13, 14, 15, 16):
+    // These are internal Baileys/WhatsApp device IDs, NOT real phone numbers. Skip them!
+    if (
+      (digits.startsWith('52') || digits.startsWith('54') || digits.startsWith('55')) &&
+      digits.length !== 10 &&
+      !digits.startsWith('90')
+    ) {
+      continue;
+    }
+
+    // 6. Valid international number (10 to 14 digits)
+    if (digits.length >= 10 && digits.length <= 14) {
+      return `+${digits}`;
+    }
+  }
+
+  return null;
+}
 
 export async function POST() {
   try {
@@ -100,24 +172,19 @@ export async function POST() {
       await prisma.group.createMany({ data: cleanGroups, skipDuplicates: true });
     }
 
-    // 4. Kişileri Ayrıştır, Numaralandır ve Tekilleştir (rawContacts + rawChats)
+    // 4. Kişileri Ayrıştır, Doğrula, Numaralandır ve Tekilleştir
     const combinedList = [...rawContacts, ...rawChats];
     const contactMap = new Map<string, { name: string; phone: string; email?: string; notes?: string }>();
 
     for (const item of combinedList) {
-      const rawJid = String(item.id || item.remoteJid || item.jid || item.number || '');
-      
-      // @g.us, @broadcast, @newsletter olanları kişiye alma
-      if (!rawJid || rawJid.includes('@g.us') || rawJid.includes('@broadcast') || rawJid.includes('@newsletter') || rawJid.includes('@lid') || rawJid.startsWith('status@')) {
+      const validPhone = extractValidPhoneNumber(item);
+      if (!validPhone) {
+        // Discard invalid items or fake LID numbers
         continue;
       }
 
-      // Numaradan sadece rakamları al
-      const digits = rawJid.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-      if (digits.length < 8) continue;
-
-      // Telefon Formatı: SADECE +${digits} (Kesinlikle '++' olmasın)
-      const phone = `+${digits}`;
+      const cleanDigits = normalizePhone(validPhone);
+      const phone = `+${cleanDigits}`;
 
       // İsim kontrolü
       const rawName = (
@@ -130,19 +197,26 @@ export async function POST() {
         ''
       ).trim();
 
-      const isRealName = !!rawName && rawName !== phone && rawName !== digits && rawName.replace(/\D/g, '') !== digits;
-      const name = isRealName ? rawName : phone;
+      const isRealName =
+        !!rawName &&
+        rawName !== phone &&
+        rawName !== cleanDigits &&
+        rawName.replace(/\D/g, '') !== cleanDigits &&
+        !rawName.startsWith('+52') &&
+        !rawName.startsWith('+54');
+
+      const name = isRealName ? rawName : formatPhoneDisplay(phone);
 
       if (!contactMap.has(phone)) {
         contactMap.set(phone, {
           name,
           phone,
-          email: `${digits}@whatsapp.local`,
+          email: `${cleanDigits}@whatsapp.local`,
           notes: 'WhatsApp Evolution API senkronizasyonu ile eklendi',
         });
       } else {
         const existing = contactMap.get(phone)!;
-        if (existing.name === phone && isRealName) {
+        if ((existing.name === phone || existing.name === formatPhoneDisplay(phone)) && isRealName) {
           existing.name = name;
         }
       }

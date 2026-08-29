@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
     let updatedCount = 0;
 
     for (const c of contactsToImport) {
-      const phone = normalizePhone(c.phone);
-      if (!phone || phone.length < 9) continue;
+      const phone = formatPhoneNumber(c.phone);
+      if (!phone || phone.length < 10) continue;
 
       const existing = await prisma.contact.findUnique({
         where: { phone },

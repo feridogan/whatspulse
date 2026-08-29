@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Telefon numarası zorunludur.' }, { status: 400 });
     }
 
-    const phone = normalizePhone(rawPhone);
+    const phone = formatPhoneNumber(rawPhone);
 
     const contact = await prisma.contact.create({
       data: {
