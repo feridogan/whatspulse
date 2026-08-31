@@ -1,91 +1,81 @@
 import axios, { AxiosInstance } from 'axios';
-import https from 'https';
 import prisma from './prisma';
-import { normalizePhone } from './utils';
 
-export interface EvolutionConfig {
+interface EvolutionConfig {
   apiUrl: string;
   instanceName: string;
-  instanceKey: string;
-  globalApiKey: string;
+  instanceKey?: string;
+  globalApiKey?: string;
 }
 
-/**
- * Normalizes Evolution API URL, handling typos like "10.0.201.201.3800" -> "http://10.0.201.201:3800"
- */
-export function normalizeEvolutionUrl(rawUrl: string): string {
-  if (!rawUrl) return 'http://10.0.201.201:3800';
-  let url = rawUrl.trim();
-
-  // Fix IP.PORT typo: e.g. "10.0.201.201.3800" -> "10.0.201.201:3800"
-  url = url.replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2');
-  url = url.replace(/\.3800$/, ':3800').replace(/\.3800\//, ':3800/');
-
-  // Ensure protocol prefix
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'http://' + url;
-  }
-
-  // Remove trailing slashes
-  return url.replace(/\/+$/, '');
-}
+const DEFAULT_API_URL = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
+const DEFAULT_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME || 'ff';
+const DEFAULT_INSTANCE_KEY = process.env.EVOLUTION_INSTANCE_KEY || '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9';
+const DEFAULT_GLOBAL_API_KEY = process.env.EVOLUTION_GLOBAL_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
 
 export async function getEvolutionConfig(): Promise<EvolutionConfig> {
-  let apiUrl = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
-  let instanceName = process.env.EVOLUTION_INSTANCE || 'ff';
-  let instanceKey = process.env.EVOLUTION_API_KEY || '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9';
-  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
-
   try {
     const setting = await prisma.setting.findUnique({
       where: { key: 'evolution_api' },
     });
-    if (setting && typeof setting.value === 'object') {
+
+    if (setting?.value && typeof setting.value === 'object') {
       const val = setting.value as any;
-      if (val.apiUrl) apiUrl = val.apiUrl;
-      if (val.evolutionUrl) apiUrl = val.evolutionUrl;
-      if (val.instanceName) instanceName = val.instanceName;
-      if (val.instanceKey) instanceKey = val.instanceKey;
-      if (val.instanceApiKey) instanceKey = val.instanceApiKey;
-      if (val.globalApiKey) globalApiKey = val.globalApiKey;
+      let rawUrl = (val.apiUrl || DEFAULT_API_URL).trim();
+
+      rawUrl = rawUrl
+        .replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2')
+        .replace(/\.3800$/, ':3800')
+        .replace(/\/+$/, '');
+
+      if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+        rawUrl = 'http://' + rawUrl;
+      }
+
+      return {
+        apiUrl: rawUrl,
+        instanceName: (val.instanceName || DEFAULT_INSTANCE_NAME).trim(),
+        instanceKey: (val.instanceKey || DEFAULT_INSTANCE_KEY).trim(),
+        globalApiKey: (val.globalApiKey || DEFAULT_GLOBAL_API_KEY).trim(),
+      };
     }
   } catch (err) {
-    // Database might not be ready yet during early boot
+    console.warn('[Evolution Config Warning]:', err);
   }
 
-  // Ensure globalApiKey is never empty, fallback to env or global default
-  if (!globalApiKey || globalApiKey === 'undefined') {
-    globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
+  let fallbackUrl = DEFAULT_API_URL.trim()
+    .replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2')
+    .replace(/\.3800$/, ':3800')
+    .replace(/\/+$/, '');
+
+  if (!fallbackUrl.startsWith('http://') && !fallbackUrl.startsWith('https://')) {
+    fallbackUrl = 'http://' + fallbackUrl;
   }
 
-  // Normalize URL
-  apiUrl = normalizeEvolutionUrl(apiUrl);
-
-  return { apiUrl, instanceName, instanceKey, globalApiKey };
+  return {
+    apiUrl: fallbackUrl,
+    instanceName: DEFAULT_INSTANCE_NAME,
+    instanceKey: DEFAULT_INSTANCE_KEY,
+    globalApiKey: DEFAULT_GLOBAL_API_KEY,
+  };
 }
 
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false,
-  keepAlive: true,
-});
-
-async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string }> {
+export async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string; config: EvolutionConfig }> {
   const config = await getEvolutionConfig();
-  const targetInstance = customInstance?.trim() || config.instanceName || 'ff';
-  // Evolution API v2: apikey header uses globalApiKey or instanceKey
-  const apiKey = config.globalApiKey || config.instanceKey || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
+  const instance = customInstance || config.instanceName;
+
+  const keyToUse = config.globalApiKey || config.instanceKey || '';
 
   const client = axios.create({
     baseURL: config.apiUrl,
     headers: {
-      'apikey': apiKey,
       'Content-Type': 'application/json',
-      'User-Agent': 'WhatsPulse/1.0.0 (Evolution API Client)',
+      apikey: keyToUse,
     },
-    httpsAgent,
-    timeout: 10000,
+    timeout: 30000,
   });
-  return { client, instance: targetInstance };
+
+  return { client, instance, config };
 }
 
 export class EvolutionService {
@@ -118,116 +108,6 @@ export class EvolutionService {
         isOpen: false,
         error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg,
       };
-    }
-  }
-
-  /**
-   * Fetch all contacts from Evolution API without limits (limit: 5000)
-   */
-  static async fetchContacts(customName?: string) {
-    try {
-      const { client, instance } = await getClient(customName);
-      const res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, { where: {}, limit: 5000 }, { timeout: 25000 });
-      let data = res.data;
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        data = data.contacts || data.data || data.items || [];
-      }
-      return Array.isArray(data) ? data : [];
-    } catch (err: any) {
-      console.warn('[Evolution API fetchContacts Warn]:', err.response?.data || err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fetch all chats from Evolution API
-   */
-  static async fetchChats(customName?: string) {
-    try {
-      const { client, instance } = await getClient(customName);
-      let res;
-      try {
-        res = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, { where: {}, limit: 5000 }, { timeout: 25000 });
-      } catch {
-        res = await client.get(`/chat/findChats/${encodeURIComponent(instance)}`, { timeout: 25000 });
-      }
-      let data = res.data;
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        data = data.chats || data.data || data.items || [];
-      }
-      return Array.isArray(data) ? data : [];
-    } catch (err: any) {
-      console.warn('[Evolution API fetchChats Warn]:', err.response?.data || err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fetch all groups from Evolution API
-   */
-  /**
-   * Fetch all groups from Evolution API
-   */
-  static async fetchGroups(customName?: string) {
-    try {
-      const { client, instance } = await getClient(customName);
-      let res;
-      try {
-        res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}?getParticipants=false`, { timeout: 25000 });
-      } catch {
-        res = await client.get(`/group/fetchAllGroups/${encodeURIComponent(instance)}`, { timeout: 25000 });
-      }
-      let data = res.data;
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        data = data.groups || data.data || data.items || [];
-      }
-      return Array.isArray(data) ? data : [];
-    } catch (err: any) {
-      console.warn('[Evolution API fetchGroups Warn]:', err.response?.data || err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fetch message history for a specific chat remoteJid from Evolution API
-   */
-  static async findMessages(remoteJid: string, limit = 100, customName?: string) {
-    try {
-      const { client, instance } = await getClient(customName);
-      let res;
-      try {
-        res = await client.post(
-          `/chat/findMessages/${encodeURIComponent(instance)}`,
-          {
-            where: {
-              key: {
-                remoteJid,
-              },
-            },
-            limit,
-          },
-          { timeout: 15000 }
-        );
-      } catch {
-        res = await client.post(
-          `/chat/findMessages/${encodeURIComponent(instance)}`,
-          {
-            where: {
-              remoteJid,
-            },
-            limit,
-          },
-          { timeout: 15000 }
-        );
-      }
-      let data = res.data;
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        data = data.messages || data.data || data.items || data.records || [];
-      }
-      return Array.isArray(data) ? data : [];
-    } catch (err: any) {
-      console.warn('[Evolution API findMessages Warn]:', err.response?.data || err.message);
-      return [];
     }
   }
 
@@ -276,39 +156,6 @@ export class EvolutionService {
 
   static async sendMedia(recipient: string, mediaUrl: string, mediaType: 'image' | 'video' | 'document' | 'audio' = 'image', caption?: string) {
     return this.sendMessage(recipient, caption || '', mediaUrl, mediaType);
-  }
-
-  /**
-   * Configure Webhook in Evolution API v2 standard
-   */
-  static async configureWebhook(webhookUrl?: string, customName?: string) {
-    const { client, instance } = await getClient(customName);
-    const targetUrl = webhookUrl || 'https://mesaj.cakirlar.net/api/webhook';
-    const payload = {
-      webhook: {
-        enabled: true,
-        url: targetUrl,
-        byEvents: false,
-        base64: false,
-        events: [
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'SEND_MESSAGE',
-          'CONNECTION_UPDATE',
-        ],
-      },
-      url: targetUrl,
-      enabled: true,
-      events: [
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'SEND_MESSAGE',
-        'CONNECTION_UPDATE',
-      ],
-    };
-
-    const res = await client.post(`/webhook/set/${encodeURIComponent(instance)}`, payload);
-    return res.data;
   }
 
   /**

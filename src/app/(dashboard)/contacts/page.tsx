@@ -27,7 +27,8 @@ import {
   MoreHorizontal,
   ChevronDown,
   UserCheck,
-  UserMinus
+  UserMinus,
+  RotateCcw
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -367,6 +368,24 @@ export default function ContactsPage() {
     }
   };
 
+  const handleResetAllGroups = async () => {
+    if (!confirm('DİKKAT: Veritabanındaki tüm gruplar silinecek ve grup listesi 0 olarak sıfırlanacaktır. Kişilerinizin rehber kayıtları KORUNACAKTIR. Onaylıyor musunuz?')) return;
+    try {
+      const res = await fetch('/api/admin/reset-groups', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedGroup('');
+        loadGroups();
+        loadContacts();
+        alert(data.message || 'Tüm gruplar başarıyla sıfırlandı.');
+      } else {
+        alert(data.error || 'Gruplar sıfırlanamadı.');
+      }
+    } catch (err: any) {
+      alert('Hata: ' + err.message);
+    }
+  };
+
   // Export Contacts to Excel
   const handleExportExcel = (groupId?: string) => {
     const url = groupId 
@@ -394,10 +413,8 @@ export default function ContactsPage() {
 
     const name = file.name.toLowerCase();
     if (name.endsWith('.vcf') || name.endsWith('.vcard')) {
-      // vCard doesn't need column mapping, jump to Step 3
       setImportStep(3);
     } else if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
-      // Parse columns for wizard
       try {
         const buffer = await file.arrayBuffer();
         const wb = XLSX.read(buffer, { type: 'buffer' });
@@ -410,7 +427,6 @@ export default function ContactsPage() {
           setExcelRawHeaders(headers);
           setExcelRawRows(json.slice(0, 5));
 
-          // Auto-guess columns
           let guessedName = '';
           let guessedPhone = '';
           let guessedEmail = '';
@@ -465,7 +481,6 @@ export default function ContactsPage() {
         const data = await res.json();
         setImportResult(data);
       } else {
-        // Excel / CSV with Column Mapping
         const buffer = await importFile.arrayBuffer();
         const wb = XLSX.read(buffer, { type: 'buffer' });
         const firstSheet = wb.SheetNames[0];
@@ -478,7 +493,6 @@ export default function ContactsPage() {
           const rawEmail = columnMapping.email ? String(row[columnMapping.email] || '').trim() : '';
           const rawNotes = columnMapping.notes ? String(row[columnMapping.notes] || '').trim() : '';
 
-          // Other unmapped columns become customFields
           const customFields: Record<string, any> = {};
           Object.keys(row).forEach((k) => {
             if (k !== columnMapping.name && k !== columnMapping.phone && k !== columnMapping.email && k !== columnMapping.notes) {
@@ -916,83 +930,119 @@ export default function ContactsPage() {
       ) : (
         /* Groups Cards View */
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              onClick={() => handleOpenGroupModal()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md"
-            >
-              <FolderPlus className="w-4 h-4" />
-              <span>Yeni Özel Grup Oluştur</span>
-            </button>
-          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Özel Müşteri Segmentleri & Gruplar</h2>
+              <p className="text-xs text-gray-400">
+                Oluşturduğunuz gruplar rehber kişilerini bağımsız şekilde segmentlere ayırır.
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {groups.map((g) => {
-              const count = g._count?.contacts || 0;
-              return (
-                <div
-                  key={g.id}
-                  className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between hover:border-emerald-500/40 transition-all group shadow-lg"
+            <div className="flex items-center gap-2">
+              {groups.length > 0 && (
+                <button
+                  onClick={handleResetAllGroups}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold"
+                  title="Tüm grupları sıfırla (Kişiler rehberde kalır)"
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
-                          style={{ backgroundColor: g.color || '#10b981' }}
-                        />
-                        <h3 className="text-base font-bold text-white truncate">{g.name}</h3>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20 shrink-0">
-                        {count} Kişi
-                      </span>
-                    </div>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Tüm Grupları Sıfırla</span>
+                </button>
+              )}
 
-                    <p className="text-xs text-gray-400 leading-relaxed min-h-[32px]">
-                      {g.description || 'Özel müşteri grubu'}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs">
-                    <button
-                      onClick={() => {
-                        setSelectedGroup(g.id);
-                        setActiveTab('contacts');
-                      }}
-                      className="text-emerald-400 hover:underline font-semibold flex items-center gap-1"
-                    >
-                      <span>Kişileri Listele</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleExportExcel(g.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
-                        title="Excel İndir"
-                      >
-                        <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      </button>
-                      <button
-                        onClick={() => handleOpenGroupModal(g)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
-                        title="Düzenle"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteGroup(g.id)}
-                        className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-                        title="Grubu Sil (Kişiler silinmez)"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+              <button
+                onClick={() => handleOpenGroupModal()}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>Yeni Özel Grup Oluştur</span>
+              </button>
+            </div>
           </div>
+
+          {groups.length === 0 ? (
+            <div className="p-12 text-center bg-[#111b21] border border-gray-800 rounded-3xl space-y-3 shadow-xl">
+              <Layers className="w-12 h-12 text-emerald-500/40 mx-auto" />
+              <h3 className="text-base font-bold text-white">Henüz hiç özel grup oluşturulmadı (0 Grup)</h3>
+              <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                Müşterilerinizi &quot;VIP Müşteriler&quot;, &quot;Yalova Bölgesi&quot;, &quot;Asansör Bakım&quot; gibi segmentlere ayırmak için yeni özel grup oluşturabilir veya Excel dosyanızı yüklerken otomatik grup tanımlayabilirsiniz.
+              </p>
+              <button
+                onClick={() => handleOpenGroupModal()}
+                className="mt-3 inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg"
+              >
+                <FolderPlus className="w-4 h-4" /> İlk Özel Grubu Oluştur
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {groups.map((g) => {
+                const count = g._count?.contacts || 0;
+                return (
+                  <div
+                    key={g.id}
+                    className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between hover:border-emerald-500/40 transition-all group shadow-lg"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                            style={{ backgroundColor: g.color || '#10b981' }}
+                          />
+                          <h3 className="text-base font-bold text-white truncate">{g.name}</h3>
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20 shrink-0">
+                          {count} Kişi
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-gray-400 leading-relaxed min-h-[32px]">
+                        {g.description || 'Özel müşteri grubu'}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs">
+                      <button
+                        onClick={() => {
+                          setSelectedGroup(g.id);
+                          setActiveTab('contacts');
+                        }}
+                        className="text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <span>Kişileri Listele</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleExportExcel(g.id)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+                          title="Excel İndir"
+                        >
+                          <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenGroupModal(g)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+                          title="Düzenle"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteGroup(g.id)}
+                          className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                          title="Grubu Sil (Kişiler silinmez)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1080,7 +1130,7 @@ export default function ContactsPage() {
                 </label>
                 <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-[#202c33]/50 border border-gray-700">
                   {groups.length === 0 ? (
-                    <span className="text-xs text-gray-500">Henüz grup oluşturulmamış.</span>
+                    <span className="text-xs text-gray-500">Henüz özel grup oluşturulmamış.</span>
                   ) : (
                     groups.map((g) => {
                       const isChecked = contactForm.groupIds.includes(g.id);
