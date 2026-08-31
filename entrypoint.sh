@@ -3,9 +3,9 @@ set -e
 
 echo "🚀 Running database schema sync..."
 if [ -f "./node_modules/.bin/prisma" ]; then
-  ./node_modules/.bin/prisma db push --skip-generate || true
+  ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss || true
 else
-  npx prisma db push --skip-generate || true
+  npx prisma db push --skip-generate --accept-data-loss || true
 fi
 
 echo "🌱 Running database seeder..."

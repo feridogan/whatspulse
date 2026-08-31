@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
+import { ensureDbSchemaSync } from '@/lib/db-sync';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     const contact = await prisma.contact.findUnique({
       where: { id: params.id },
       include: {
@@ -29,6 +32,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     const body = await req.json();
     const { name, phone: rawPhone, email, notes, isBlacklisted, groupIds, customFields } = body;
 
@@ -91,6 +96,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     await prisma.contact.delete({
       where: { id: params.id },
     });

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
+import { ensureDbSchemaSync } from '@/lib/db-sync';
 
 export async function GET(req: NextRequest) {
   try {
+    await ensureDbSchemaSync();
+
     const { searchParams } = new URL(req.url);
     const search = (searchParams.get('search') || '').trim();
     const groupId = (searchParams.get('groupId') || '').trim();
@@ -61,6 +64,8 @@ export async function GET(req: NextRequest) {
 // POST: Smart Upsert Contact & Safe Group Assignment
 export async function POST(req: NextRequest) {
   try {
+    await ensureDbSchemaSync();
+
     const body = await req.json();
     const { name, phone: rawPhone, email, notes, groupIds, customFields, isBlacklisted } = body;
 
@@ -171,6 +176,8 @@ export async function POST(req: NextRequest) {
 // Bulk delete endpoint
 export async function DELETE(req: NextRequest) {
   try {
+    await ensureDbSchemaSync();
+
     const { ids } = await req.json();
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: 'Silinecek kişi ID listesi gereklidir.' }, { status: 400 });

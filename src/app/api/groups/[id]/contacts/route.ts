@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { ensureDbSchemaSync } from '@/lib/db-sync';
 
 // GET: List all contacts in a specific group
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     const group = await prisma.group.findUnique({
       where: { id: params.id },
       include: {
@@ -28,6 +31,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // POST: Add one or more contacts to this group (Many-to-Many safe assignment)
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     const { contactIds } = await req.json();
     if (!Array.isArray(contactIds) || contactIds.length === 0) {
       return NextResponse.json({ error: 'Eklenecek kişi listesi zorunludur.' }, { status: 400 });
@@ -41,15 +46,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Grup bulunamadı.' }, { status: 404 });
     }
 
-    const entries = contactIds.map((cId: string) => ({
-      contactId: cId,
-      groupId: params.id,
-    }));
-
-    await prisma.contactGroup.createMany({
-      data: entries,
-      skipDuplicates: true,
-    });
+    for (const cId of contactIds) {
+      await prisma.contactGroup.upsert({
+        where: {
+          contactId_groupId: {
+            contactId: cId,
+            groupId: params.id,
+          },
+        },
+        update: {},
+        create: {
+          contactId: cId,
+          groupId: params.id,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -63,6 +74,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 // DELETE: Remove one or more contacts from this group (Does NOT delete contact records)
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    await ensureDbSchemaSync();
+
     const { contactIds } = await req.json();
     if (!Array.isArray(contactIds) || contactIds.length === 0) {
       return NextResponse.json({ error: 'Gruptan çıkarılacak kişi listesi zorunludur.' }, { status: 400 });

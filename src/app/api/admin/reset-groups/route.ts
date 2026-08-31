@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { ensureDbSchemaSync } from '@/lib/db-sync';
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureDbSchemaSync();
+
     const adminKey = req.headers.get('x-admin-key');
     let authorized = false;
 
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
       success: true,
       deletedContactGroups: cgResult.count,
       deletedGroups: groupResult.count,
-      message: `Tüm WhatsApp ve yerel gruplar kalıcı olarak temizlendi (0 Grup). Kişi rehberi korundu.`,
+      message: `Tüm gruplar ve grup üyelikleri kalıcı olarak temizlendi (0 Grup). Kişi rehberi korundu.`,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

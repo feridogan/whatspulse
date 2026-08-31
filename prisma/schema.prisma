@@ -68,10 +68,10 @@ model Group {
 }
 
 model ContactGroup {
-  id         String   @id @default(cuid())
-  contactId  String
-  groupId    String
-  assignedAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  contactId String
+  groupId   String
+  createdAt DateTime @default(now())
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
   group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
