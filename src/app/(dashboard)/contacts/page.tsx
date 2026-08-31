@@ -25,7 +25,9 @@ import {
   ArrowRight,
   Filter,
   MoreHorizontal,
-  ChevronDown
+  ChevronDown,
+  UserCheck,
+  UserMinus
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -48,6 +50,10 @@ export default function ContactsPage() {
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<any | null>(null);
+
+  // Bulk Assign to Group Modal
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkAssignGroupId, setBulkAssignGroupId] = useState<string>('');
 
   // Contact Form State
   const [contactForm, setContactForm] = useState({
@@ -222,7 +228,7 @@ export default function ContactsPage() {
 
   // Delete Single Contact
   const handleDeleteContact = async (id: string) => {
-    if (!confirm('Bu kişiyi silmek istediğinize emin misiniz?')) return;
+    if (!confirm('Bu kişiyi rehberden silmek istediğinize emin misiniz?')) return;
     try {
       const res = await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -237,12 +243,55 @@ export default function ContactsPage() {
   // Bulk Delete Selected Contacts
   const handleBulkDelete = async () => {
     if (selectedContactIds.length === 0) return;
-    if (!confirm(`Seçili ${selectedContactIds.length} kişiyi silmek istediğinize emin misiniz?`)) return;
+    if (!confirm(`Seçili ${selectedContactIds.length} kişiyi rehberden silmek istediğinize emin misiniz?`)) return;
     try {
       const res = await fetch('/api/contacts', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedContactIds }),
+      });
+      if (res.ok) {
+        setSelectedContactIds([]);
+        loadContacts();
+        loadGroups();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Bulk Assign Selected Contacts to Group
+  const handleBulkAssignGroup = async () => {
+    if (!bulkAssignGroupId || selectedContactIds.length === 0) return;
+    try {
+      const res = await fetch(`/api/groups/${bulkAssignGroupId}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactIds: selectedContactIds }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowBulkAssignModal(false);
+        setSelectedContactIds([]);
+        loadContacts();
+        loadGroups();
+      } else {
+        alert(data.error || 'Gruba eklenemedi.');
+      }
+    } catch (err: any) {
+      alert('Hata: ' + err.message);
+    }
+  };
+
+  // Bulk Remove Selected Contacts from Current Filtered Group
+  const handleBulkRemoveFromGroup = async () => {
+    if (!selectedGroup || selectedContactIds.length === 0) return;
+    if (!confirm(`Seçili ${selectedContactIds.length} kişiyi bu gruptan çıkarmak istediğinize emin misiniz? (Kişiler rehberde kalacaktır)`)) return;
+    try {
+      const res = await fetch(`/api/groups/${selectedGroup}/contacts`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactIds: selectedContactIds }),
       });
       if (res.ok) {
         setSelectedContactIds([]);
@@ -305,7 +354,7 @@ export default function ContactsPage() {
   };
 
   const handleDeleteGroup = async (groupId: string) => {
-    if (!confirm('Bu grubu silmek istediğinize emin misiniz? Gruptaki kişiler silinmez.')) return;
+    if (!confirm('Bu grubu silmek istediğinize emin misiniz? Gruptaki kişilerin rehber kaydı kesinlikle silinmez.')) return;
     try {
       const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
       if (res.ok) {
@@ -480,13 +529,13 @@ export default function ContactsPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20 flex items-center gap-1">
-              <Users className="w-3.5 h-3.5" /> Gelişmiş CRM
+              <Users className="w-3.5 h-3.5" /> Özel Grup & CRM Mimarisi
             </span>
             <span className="text-xs text-gray-400">{total} Kayıtlı Kişi</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">Kişi ve Grup Yönetimi</h1>
+          <h1 className="text-2xl font-bold text-white mt-1">Özel Grup & Kişi Yönetimi</h1>
           <p className="text-xs sm:text-sm text-gray-400">
-            Rehberinizi yönetin, Excel/vCard ile aktarın, dinamik değişkenlerle gruplayın.
+            Kendi özel müşteri segmentlerinizi oluşturun, Excel/vCard ile aktarın, kişileri güvenle gruplayın.
           </p>
         </div>
 
@@ -537,7 +586,7 @@ export default function ContactsPage() {
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Kişiler ({total})</span>
+            <span>Tüm Kişiler ({total})</span>
           </button>
 
           <button
@@ -549,7 +598,7 @@ export default function ContactsPage() {
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>Gruplar ({groups.length})</span>
+            <span>Özel Gruplar ({groups.length})</span>
           </button>
         </div>
 
@@ -618,19 +667,45 @@ export default function ContactsPage() {
 
       {/* Bulk Action Bar (When items selected) */}
       {activeTab === 'contacts' && selectedContactIds.length > 0 && (
-        <div className="p-3.5 rounded-2xl bg-[#202c33] border border-emerald-500/40 flex items-center justify-between shadow-lg animate-fade-in">
+        <div className="p-3.5 rounded-2xl bg-[#202c33] border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3 shadow-lg animate-fade-in">
           <div className="flex items-center gap-2 text-xs font-bold text-white">
             <CheckSquare className="w-4 h-4 text-emerald-400" />
             <span>{selectedContactIds.length} kişi seçildi</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Gruba Ekle */}
+            <button
+              onClick={() => {
+                setBulkAssignGroupId(groups[0]?.id || '');
+                setShowBulkAssignModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 text-xs font-semibold"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Gruba Ata</span>
+            </button>
+
+            {/* Gruptan Çıkar (Filtreli gruptaysa) */}
+            {selectedGroup && (
+              <button
+                onClick={handleBulkRemoveFromGroup}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-xs font-semibold"
+                title="Kişileri bu gruptan çıkarır ancak rehberden silmez"
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                <span>Bu Gruptan Çıkar</span>
+              </button>
+            )}
+
+            {/* Rehberden Sil */}
             <button
               onClick={handleBulkDelete}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Seçilenleri Sil</span>
+              <span>Rehberden Sil</span>
             </button>
+
             <button
               onClick={() => setSelectedContactIds([])}
               className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
@@ -669,7 +744,7 @@ export default function ContactsPage() {
                   </th>
                   <th className="p-4">Kişi Bilgisi</th>
                   <th className="p-4">Telefon Numarası</th>
-                  <th className="p-4">Gruplar</th>
+                  <th className="p-4">Dahil Olduğu Gruplar</th>
                   <th className="p-4">Özel Değişkenler</th>
                   <th className="p-4">Durum</th>
                   <th className="p-4 text-right">İşlemler</th>
@@ -824,7 +899,7 @@ export default function ContactsPage() {
                             <button
                               onClick={() => handleDeleteContact(c.id)}
                               className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
-                              title="Sil"
+                              title="Rehberden Sil"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -847,7 +922,7 @@ export default function ContactsPage() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md"
             >
               <FolderPlus className="w-4 h-4" />
-              <span>Yeni Grup Oluştur</span>
+              <span>Yeni Özel Grup Oluştur</span>
             </button>
           </div>
 
@@ -874,7 +949,7 @@ export default function ContactsPage() {
                     </div>
 
                     <p className="text-xs text-gray-400 leading-relaxed min-h-[32px]">
-                      {g.description || 'Açıklama girilmemiş.'}
+                      {g.description || 'Özel müşteri grubu'}
                     </p>
                   </div>
 
@@ -908,7 +983,7 @@ export default function ContactsPage() {
                       <button
                         onClick={() => handleDeleteGroup(g.id)}
                         className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-                        title="Grubu Sil"
+                        title="Grubu Sil (Kişiler silinmez)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1159,7 +1234,7 @@ export default function ContactsPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <FolderPlus className="w-5 h-5 text-emerald-400" />
-                {editingGroup ? 'Grubu Düzenle' : 'Yeni Grup Oluştur'}
+                {editingGroup ? 'Grubu Düzenle' : 'Yeni Özel Grup Oluştur'}
               </h3>
               <button
                 onClick={() => setShowGroupModal(false)}
@@ -1175,7 +1250,7 @@ export default function ContactsPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Örn: VIP Müşteriler, İstanbul Şubesi"
+                  placeholder="Örn: VIP Müşteriler, Asansör Bakım, Yalova Bölgesi"
                   value={groupForm.name}
                   onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
                   className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
@@ -1231,7 +1306,67 @@ export default function ContactsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. Excel / CSV / vCard Import Wizard Modal */}
+      {/* 3. Bulk Assign to Group Modal */}
+      {/* ========================================================================= */}
+      {showBulkAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-emerald-400" />
+                Seçili Kişileri Gruba Ata
+              </h3>
+              <button
+                onClick={() => setShowBulkAssignModal(false)}
+                className="p-1 rounded text-gray-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300 mb-4">
+              Seçtiğiniz <span className="text-emerald-400 font-bold">{selectedContactIds.length} kişiyi</span> aşağıdaki gruba bağlayın:
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Hedef Grup</label>
+                <select
+                  value={bulkAssignGroupId}
+                  onChange={(e) => setBulkAssignGroupId(e.target.value)}
+                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                >
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g._count?.contacts || 0} Kişi)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkAssignModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkAssignGroup}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg"
+                >
+                  Gruba Ekle
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. Excel / CSV / vCard Import Wizard Modal */}
       {/* ========================================================================= */}
       {showImportWizard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
@@ -1424,7 +1559,7 @@ export default function ContactsPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">
-                    Yeni Grup Oluştur ve Otomatik Ata
+                    Yeni Özel Grup Oluştur ve Otomatik Ata
                   </label>
                   <input
                     type="text"
