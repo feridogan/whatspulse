@@ -1,66 +1,57 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 import prisma from './prisma';
 
 interface EvolutionConfig {
   apiUrl: string;
-  instanceName: string;
   instanceKey?: string;
   globalApiKey?: string;
+  instanceName: string;
 }
 
-const DEFAULT_API_URL = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
-const DEFAULT_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME || 'ff';
-const DEFAULT_INSTANCE_KEY = process.env.EVOLUTION_INSTANCE_KEY || '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9';
-const DEFAULT_GLOBAL_API_KEY = process.env.EVOLUTION_GLOBAL_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
+let cachedConfig: EvolutionConfig | null = null;
+let lastConfigFetch = 0;
+const CACHE_TTL = 30000; // 30 seconds cache
 
+/**
+ * Fetch and cache Evolution API configuration from database or env variables
+ */
 export async function getEvolutionConfig(): Promise<EvolutionConfig> {
+  const now = Date.now();
+  if (cachedConfig && now - lastConfigFetch < CACHE_TTL) {
+    return cachedConfig;
+  }
+
+  let apiUrl = process.env.EVOLUTION_API_URL || 'http://10.0.201.201:3800';
+  let instanceName = process.env.EVOLUTION_INSTANCE || 'ff';
+  let globalApiKey = process.env.EVOLUTION_GLOBAL_KEY || process.env.EVOLUTION_API_KEY || '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a';
+  let instanceKey = process.env.EVOLUTION_API_KEY || '';
+
   try {
-    const setting = await prisma.setting.findUnique({
-      where: { key: 'evolution_api' },
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: { in: ['evolution_api_url', 'evolution_instance', 'evolution_global_key', 'evolution_api_key'] },
+      },
     });
 
-    if (setting?.value && typeof setting.value === 'object') {
-      const val = setting.value as any;
-      let rawUrl = (val.apiUrl || DEFAULT_API_URL).trim();
-
-      rawUrl = rawUrl
-        .replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2')
-        .replace(/\.3800$/, ':3800')
-        .replace(/\/+$/, '');
-
-      if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
-        rawUrl = 'http://' + rawUrl;
-      }
-
-      return {
-        apiUrl: rawUrl,
-        instanceName: (val.instanceName || DEFAULT_INSTANCE_NAME).trim(),
-        instanceKey: (val.instanceKey || DEFAULT_INSTANCE_KEY).trim(),
-        globalApiKey: (val.globalApiKey || DEFAULT_GLOBAL_API_KEY).trim(),
-      };
+    for (const s of settings) {
+      const val = typeof s.value === 'string' ? s.value : JSON.stringify(s.value).replace(/^"|"$/g, '');
+      if (s.key === 'evolution_api_url' && val) apiUrl = val;
+      if (s.key === 'evolution_instance' && val) instanceName = val;
+      if (s.key === 'evolution_global_key' && val) globalApiKey = val;
+      if (s.key === 'evolution_api_key' && val) instanceKey = val;
     }
-  } catch (err) {
-    console.warn('[Evolution Config Warning]:', err);
+  } catch (error) {
+    console.warn('[Evolution Config]: Using environment variables as fallback.');
   }
 
-  let fallbackUrl = DEFAULT_API_URL.trim()
-    .replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{2,5})/, '$1:$2')
-    .replace(/\.3800$/, ':3800')
-    .replace(/\/+$/, '');
+  apiUrl = apiUrl.replace(/\/+$/, '');
 
-  if (!fallbackUrl.startsWith('http://') && !fallbackUrl.startsWith('https://')) {
-    fallbackUrl = 'http://' + fallbackUrl;
-  }
-
-  return {
-    apiUrl: fallbackUrl,
-    instanceName: DEFAULT_INSTANCE_NAME,
-    instanceKey: DEFAULT_INSTANCE_KEY,
-    globalApiKey: DEFAULT_GLOBAL_API_KEY,
-  };
+  cachedConfig = { apiUrl, instanceKey, globalApiKey, instanceName };
+  lastConfigFetch = now;
+  return cachedConfig;
 }
 
-export async function getClient(customInstance?: string): Promise<{ client: AxiosInstance; instance: string; config: EvolutionConfig }> {
+async function getClient(customInstance?: string) {
   const config = await getEvolutionConfig();
   const instance = customInstance || config.instanceName;
 
@@ -143,7 +134,7 @@ export class EvolutionService {
       number: cleanNumber,
       text: content,
       delay: 1200,
-      linkPreview: true,
+      linkPreview: false,
     };
 
     const res = await client.post(`/message/sendText/${encodeURIComponent(instance)}`, payload);
