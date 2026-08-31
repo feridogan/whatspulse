@@ -103,6 +103,53 @@ export class EvolutionService {
   }
 
   /**
+   * Fetch QR code or connect/create WhatsApp instance
+   */
+  static async createInstance(customName?: string) {
+    const { client, instance } = await getClient(customName);
+    try {
+      // 1. Try to connect to existing instance to get QR
+      const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
+      const qrData = connectRes.data?.qrcode || connectRes.data?.base64 || connectRes.data?.code || connectRes.data?.pairingCode;
+      if (qrData) {
+        return {
+          success: true,
+          qrcode: qrData,
+          base64: qrData,
+          pairingCode: connectRes.data?.pairingCode,
+          data: connectRes.data,
+        };
+      }
+      return {
+        success: true,
+        data: connectRes.data,
+      };
+    } catch (connectError: any) {
+      // 2. If instance doesn't exist, create it
+      try {
+        const createRes = await client.post('/instance/create', {
+          instanceName: instance,
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+        });
+        const qrData = createRes.data?.qrcode?.base64 || createRes.data?.base64 || createRes.data?.qrcode || createRes.data?.code;
+        return {
+          success: true,
+          qrcode: qrData,
+          base64: qrData,
+          data: createRes.data,
+        };
+      } catch (createError: any) {
+        const errMsg = createError.response?.data?.response?.message || createError.response?.data?.message || createError.message;
+        return {
+          success: false,
+          error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg,
+        };
+      }
+    }
+  }
+
+  /**
    * Send WhatsApp text or media message
    */
   static async sendMessage(
@@ -152,9 +199,25 @@ export class EvolutionService {
   /**
    * Logout WhatsApp instance session
    */
+  static async logoutInstance(customName?: string) {
+    try {
+      const { client, instance } = await getClient(customName);
+      const res = await client.delete(`/instance/logout/${encodeURIComponent(instance)}`);
+      return { success: true, data: res.data, message: `"${instance}" oturumu kapatıldı.` };
+    } catch (error: any) {
+      // Also try instance delete or disconnect
+      try {
+        const { client, instance } = await getClient(customName);
+        const delRes = await client.delete(`/instance/delete/${encodeURIComponent(instance)}`);
+        return { success: true, data: delRes.data, message: `"${instance}" oturumu silindi/kapatıldı.` };
+      } catch (e: any) {
+        const errMsg = error.response?.data?.response?.message || error.response?.data?.message || error.message;
+        return { success: false, error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg };
+      }
+    }
+  }
+
   static async logout(customName?: string) {
-    const { client, instance } = await getClient(customName);
-    const res = await client.delete(`/instance/logout/${encodeURIComponent(instance)}`);
-    return res.data;
+    return this.logoutInstance(customName);
   }
 }

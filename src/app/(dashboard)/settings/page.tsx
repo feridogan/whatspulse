@@ -300,32 +300,55 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {isConnected && (
-            <button
-              type="button"
-              onClick={handleLogoutInstance}
-              disabled={loggingOut}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>{loggingOut ? 'Kapatılıyor...' : 'Oturumu Kapat'}</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <button
+                type="button"
+                onClick={handleLogoutInstance}
+                disabled={loggingOut}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{loggingOut ? 'Kapatılıyor...' : 'Oturumu Kapat'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fetchQrCode(evoForm.instanceName)}
+                disabled={loadingQr}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>{loadingQr ? 'QR Alınıyor...' : 'QR Kodu Göster / Bağlan'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* QR Code Viewer (if connecting / scan_qr_code) */}
-        {isConnecting && qrCodeData && (
-          <div className="p-5 rounded-2xl bg-[#0b141a] border border-amber-500/40 text-center space-y-3">
-            <div className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1.5">
+        {/* QR Code Viewer (if qrCodeData is present or connecting) */}
+        {qrCodeData && (
+          <div className="p-5 rounded-2xl bg-[#0b141a] border border-emerald-500/40 text-center space-y-3 animate-fade-in">
+            <div className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
               <QrCode className="w-4 h-4" />
-              WhatsApp Web &gt; Bağlı Cihazlar &gt; Cihaz Bağla
+              WhatsApp &gt; Bağlı Cihazlar &gt; Cihaz Bağla
             </div>
             <div className="bg-white p-3 rounded-2xl inline-block shadow-xl">
-              <img src={qrCodeData} alt="WhatsApp QR Code" className="w-56 h-56 mx-auto" />
+              <img
+                src={qrCodeData.startsWith('data:') ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
+                alt="WhatsApp QR Code"
+                className="w-56 h-56 mx-auto object-contain"
+              />
             </div>
             <p className="text-[11px] text-gray-400">
-              Telefonunuzun WhatsApp uygulamasından QR kodu taratın.
+              Telefonunuzun WhatsApp uygulamasından yukarıdaki QR kodu taratın.
             </p>
+            <button
+              type="button"
+              onClick={() => checkEvolutionStatus(evoForm.instanceName)}
+              className="px-4 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold hover:bg-emerald-500/30"
+            >
+              Bağlantıyı Kontrol Et
+            </button>
           </div>
         )}
       </div>
