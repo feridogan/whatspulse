@@ -28,7 +28,8 @@ import {
   ChevronDown,
   UserCheck,
   UserMinus,
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -55,6 +56,20 @@ export default function ContactsPage() {
   // Bulk Assign to Group Modal
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [bulkAssignGroupId, setBulkAssignGroupId] = useState<string>('');
+
+  // Quick Search & Auto-Suggest
+  const [suggestResults, setSuggestResults] = useState<any[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [showSuggestDropdown, setShowSuggestDropdown] = useState(false);
+  const [addingContactId, setAddingContactId] = useState<string | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Toast Notification
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   // Contact Form State
   const [contactForm, setContactForm] = useState({
@@ -132,6 +147,94 @@ export default function ContactsPage() {
   useEffect(() => {
     loadGroups();
   }, []);
+
+  // Debounced Auto-Suggest Search (Searches across all contacts)
+  useEffect(() => {
+    const query = search.trim();
+    if (query.length >= 2) {
+      const timer = setTimeout(async () => {
+        try {
+          setSuggestLoading(true);
+          const res = await fetch(`/api/contacts?search=${encodeURIComponent(query)}&limit=10`);
+          const data = await res.json();
+          setSuggestResults(data.contacts || []);
+          setShowSuggestDropdown(true);
+        } catch (err) {
+          console.error('Öneri arama hatası:', err);
+        } finally {
+          setSuggestLoading(false);
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    } else {
+      setSuggestResults([]);
+      setShowSuggestDropdown(false);
+    }
+  }, [search]);
+
+  // Click outside and escape key listener for auto-suggest
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestDropdown(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSuggestDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Quick Add Contact to Group
+  const handleQuickAddContactToGroup = async (contact: any, groupId: string) => {
+    if (!groupId) return;
+    try {
+      setAddingContactId(contact.id);
+      const res = await fetch('/api/groups/add-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: contact.id, groupId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const groupObj = groups.find((g) => g.id === groupId);
+        showToast(`"${contact.name}" ${groupObj ? `"${groupObj.name}"` : ''} grubuna başarıyla eklendi.`, 'success');
+
+        // Optimistically update suggest item
+        setSuggestResults((prev) =>
+          prev.map((c) => {
+            if (c.id === contact.id) {
+              const currentGroups = c.groups || [];
+              const exists = currentGroups.some((cg: any) => (cg.groupId || cg.group?.id) === groupId);
+              if (!exists) {
+                return {
+                  ...c,
+                  groups: [...currentGroups, { groupId, group: groupObj || { id: groupId, name: 'Grup' } }],
+                };
+              }
+            }
+            return c;
+          })
+        );
+
+        loadGroups();
+        loadContacts();
+      } else {
+        showToast(data.error || 'Gruba eklenirken hata oluştu.', 'error');
+      }
+    } catch (err: any) {
+      showToast('Hata: ' + err.message, 'error');
+    } finally {
+      setAddingContactId(null);
+    }
+  };
 
   // Open Add/Edit Contact Modal
   const handleOpenContactModal = (contact?: any) => {
@@ -636,16 +739,148 @@ export default function ContactsPage() {
               <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-3 pointer-events-none" />
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
+            {/* Search Input with Auto-Suggest Dropdown */}
+            <div className="relative" ref={searchContainerRef}>
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
               <input
                 type="text"
                 placeholder="İsim, telefon, e-posta ara..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-[#111b21] border border-gray-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-all w-48 sm:w-64"
+                onFocus={() => {
+                  if (search.trim().length >= 2) setShowSuggestDropdown(true);
+                }}
+                className="bg-[#111b21] border border-gray-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-all w-52 sm:w-72"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-2.5 text-gray-400 hover:text-white"
+                  title="Aramayı Temizle"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {/* Floating Auto-Suggest Results Dropdown */}
+              {showSuggestDropdown && search.trim().length >= 2 && (
+                <div className="absolute top-full right-0 w-80 sm:w-96 mt-2 bg-[#1f2c34] border border-gray-700/80 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-md animate-fade-in divide-y divide-gray-800">
+                  <div className="px-3.5 py-2.5 bg-[#111b21] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-300">
+                      <Users className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>
+                        {selectedGroupObj
+                          ? `"${selectedGroupObj.name}" Grubuna Ekle`
+                          : 'Rehberde Hızlı Arama'}
+                      </span>
+                    </div>
+                    {suggestLoading ? (
+                      <RefreshCw className="w-3 h-3 text-emerald-400 animate-spin" />
+                    ) : (
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        {suggestResults.length} kişi
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-gray-800/60 custom-scrollbar">
+                    {suggestResults.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-gray-400">
+                        {suggestLoading ? 'Aranıyor...' : 'Eşleşen kişi bulunamadı.'}
+                      </div>
+                    ) : (
+                      suggestResults.map((c) => {
+                        const isInSelectedGroup = selectedGroup
+                          ? (c.groups || []).some(
+                              (cg: any) => (cg.groupId || cg.group?.id) === selectedGroup
+                            )
+                          : false;
+
+                        return (
+                          <div
+                            key={c.id}
+                            className="p-3 hover:bg-[#2a3942]/60 transition-colors flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0 flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-xs flex-shrink-0">
+                                {c.name ? c.name.charAt(0).toUpperCase() : '#'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                                  <span className="truncate">{c.name}</span>
+                                  {c.isBlacklisted && (
+                                    <span className="text-[9px] text-red-400 bg-red-500/10 px-1 py-0.2 rounded border border-red-500/20">
+                                      Kara Liste
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-400 font-mono">
+                                  {formatPhoneDisplay(c.phone)}
+                                </div>
+                                {/* Group Badges */}
+                                {c.groups && c.groups.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {c.groups.slice(0, 2).map((cg: any, idx: number) => (
+                                      <span
+                                        key={idx}
+                                        className="text-[9px] px-1.5 py-0.2 rounded font-medium bg-gray-800 text-gray-300 border border-gray-700"
+                                      >
+                                        {cg.group?.name || 'Grup'}
+                                      </span>
+                                    ))}
+                                    {c.groups.length > 2 && (
+                                      <span className="text-[9px] text-gray-500">
+                                        +{c.groups.length - 2}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action Button */}
+                            {selectedGroup ? (
+                              isInSelectedGroup ? (
+                                <span className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-800/80 border border-gray-700 text-gray-400 text-[11px] font-semibold cursor-default">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Bu Grupta</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAddContactToGroup(c, selectedGroup)}
+                                  disabled={addingContactId === c.id}
+                                  className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                  {addingContactId === c.id ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Plus className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Gruba Ekle</span>
+                                </button>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleOpenContactModal(c);
+                                  setShowSuggestDropdown(false);
+                                }}
+                                className="flex-shrink-0 p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                                title="Kişiyi Düzenle"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1680,6 +1915,31 @@ export default function ContactsPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-md animate-fade-in ${
+            toast.type === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
+              : 'bg-red-950/90 border-red-500/50 text-red-200'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          )}
+          <span className="text-xs font-semibold">{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-2 text-gray-400 hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>
