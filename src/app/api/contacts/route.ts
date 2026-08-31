@@ -58,33 +58,62 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST: Smart Upsert Contact & Safe Group Assignment
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { name, phone: rawPhone, email, notes, groupIds, customFields, isBlacklisted } = body;
 
-    if (!rawPhone || !rawPhone.trim()) {
+    if (!rawPhone || !String(rawPhone).trim()) {
       return NextResponse.json({ error: 'Telefon numarası zorunludur.' }, { status: 400 });
     }
 
-    const phone = formatPhoneNumber(rawPhone);
+    const phone = formatPhoneNumber(String(rawPhone));
     if (!phone || phone.length < 10) {
       return NextResponse.json({ error: 'Geçersiz telefon numarası.' }, { status: 400 });
     }
 
-    const contact = await prisma.contact.create({
-      data: {
-        name: (name || `Kişi ${phone.slice(-4)}`).trim(),
+    // 1. Check if contact exists to merge customFields and details
+    const existing = await prisma.contact.findUnique({
+      where: { phone },
+    });
+
+    const contactName = (name && String(name).trim()) 
+      ? String(name).trim() 
+      : (existing ? existing.name : `Kişi ${phone.slice(-4)}`);
+
+    const contactEmail = email !== undefined 
+      ? (email ? String(email).trim() : null) 
+      : (existing?.email || null);
+
+    const contactNotes = notes !== undefined 
+      ? (notes ? String(notes).trim() : null) 
+      : (existing?.notes || null);
+
+    const mergedCustomFields = {
+      ...(existing?.customFields && typeof existing.customFields === 'object' ? (existing.customFields as Record<string, any>) : {}),
+      ...(customFields && typeof customFields === 'object' ? customFields : {}),
+    };
+
+    const isBlacklistState = isBlacklisted !== undefined ? Boolean(isBlacklisted) : (existing?.isBlacklisted || false);
+
+    // 2. Perform Upsert
+    const contact = await prisma.contact.upsert({
+      where: { phone },
+      update: {
+        name: contactName,
+        email: contactEmail,
+        notes: contactNotes,
+        isBlacklisted: isBlacklistState,
+        customFields: mergedCustomFields,
+      },
+      create: {
+        name: contactName,
         phone,
-        email: email?.trim() || null,
-        notes: notes?.trim() || null,
-        isBlacklisted: Boolean(isBlacklisted),
-        customFields: customFields || {},
-        groups: Array.isArray(groupIds) && groupIds.length > 0 ? {
-          create: groupIds.map((gId: string) => ({
-            group: { connect: { id: gId } },
-          })),
-        } : undefined,
+        email: contactEmail,
+        notes: contactNotes,
+        isBlacklisted: isBlacklistState,
+        customFields: mergedCustomFields,
       },
       include: {
         groups: {
@@ -93,7 +122,28 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (isBlacklisted) {
+    // 3. Connect to Groups (Many-to-Many safe upsert)
+    if (Array.isArray(groupIds) && groupIds.length > 0) {
+      for (const gId of groupIds) {
+        if (!gId) continue;
+        await prisma.contactGroup.upsert({
+          where: {
+            contactId_groupId: {
+              contactId: contact.id,
+              groupId: gId,
+            },
+          },
+          update: {},
+          create: {
+            contactId: contact.id,
+            groupId: gId,
+          },
+        });
+      }
+    }
+
+    // 4. Blacklist table synchronization
+    if (isBlacklistState) {
       await prisma.blacklist.upsert({
         where: { phone },
         update: { reason: 'Manuel engelleme' },
@@ -101,11 +151,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json(contact, { status: 201 });
+    // Return the updated/created contact with all groups
+    const finalContact = await prisma.contact.findUnique({
+      where: { id: contact.id },
+      include: {
+        groups: {
+          include: { group: true },
+        },
+      },
+    });
+
+    return NextResponse.json(finalContact || contact, { status: 200 });
   } catch (error: any) {
-    if (error.code === 'P2002') {
-      return NextResponse.json({ error: 'Bu telefon numarası zaten kayıtlı.' }, { status: 400 });
-    }
+    console.error('Contact Upsert Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
