@@ -21,24 +21,26 @@ export async function GET(req: NextRequest) {
       timeout: 15000,
     });
 
-    const state = await EvolutionService.getConnectionState();
-
-    // Try restart instance socket
-    let restartResult = null;
+    let instances = null;
     try {
-      const res = await client.put(`/instance/restart/${config.instance}`);
-      restartResult = res.data;
+      const res = await client.get('/instance/fetchInstances');
+      instances = res.data;
     } catch (e: any) {
-      restartResult = { error: e.message, data: e.response?.data };
+      instances = { error: e.message, data: e.response?.data };
+    }
+
+    let connectionState = null;
+    try {
+      const res = await client.get(`/instance/connectionState/${config.instance}`);
+      connectionState = res.data;
+    } catch (e: any) {
+      connectionState = { error: e.message, data: e.response?.data };
     }
 
     return NextResponse.json({
-      state,
-      config: {
-        apiUrl: config.apiUrl,
-        instance: config.instance,
-      },
-      restartResult,
+      config,
+      instances,
+      connectionState,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
