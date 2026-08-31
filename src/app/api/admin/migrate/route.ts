@@ -16,16 +16,18 @@ export async function POST(req: NextRequest) {
           SELECT 1 FROM information_schema.columns 
           WHERE table_name='ContactGroup' AND column_name='id'
         ) THEN
-          ALTER TABLE "ContactGroup" DROP CONSTRAINT IF EXISTS "ContactGroup_pkey";
+          ALTER TABLE "ContactGroup" DROP CONSTRAINT IF EXISTS "ContactGroup_pkey" CASCADE;
           ALTER TABLE "ContactGroup" ADD COLUMN "id" TEXT;
           UPDATE "ContactGroup" SET "id" = md5(random()::text || clock_timestamp()::text) WHERE "id" IS NULL;
           ALTER TABLE "ContactGroup" ALTER COLUMN "id" SET NOT NULL;
-          ALTER TABLE "ContactGroup" ADD PRIMARY KEY ("id");
+          ALTER TABLE "ContactGroup" ADD CONSTRAINT "ContactGroup_pkey" PRIMARY KEY ("id");
         END IF;
 
-        -- Ensure unique constraint on contactId and groupId
+        -- Ensure unique constraint or index on (contactId, groupId)
         IF NOT EXISTS (
           SELECT 1 FROM pg_constraint WHERE conname = 'ContactGroup_contactId_groupId_key'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE indexname = 'ContactGroup_contactId_groupId_key'
         ) THEN
           ALTER TABLE "ContactGroup" ADD CONSTRAINT "ContactGroup_contactId_groupId_key" UNIQUE ("contactId", "groupId");
         END IF;
