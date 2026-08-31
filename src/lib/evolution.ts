@@ -105,47 +105,56 @@ export class EvolutionService {
   /**
    * Fetch QR code or connect/create WhatsApp instance
    */
-  static async createInstance(customName?: string) {
+  static async createInstance(customName?: string, forceRefresh = false) {
     const { client, instance } = await getClient(customName);
+    
+    if (forceRefresh) {
+      try {
+        await client.delete(`/instance/delete/${encodeURIComponent(instance)}`);
+      } catch (e: any) {}
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
     try {
-      // 1. Try to connect to existing instance to get QR
-      const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
-      const qrData = connectRes.data?.qrcode || connectRes.data?.base64 || connectRes.data?.code || connectRes.data?.pairingCode;
-      if (qrData) {
-        return {
-          success: true,
-          qrcode: qrData,
-          base64: qrData,
-          pairingCode: connectRes.data?.pairingCode,
-          data: connectRes.data,
-        };
+      if (!forceRefresh) {
+        // 1. Try to connect to existing instance to get QR
+        const connectRes = await client.get(`/instance/connect/${encodeURIComponent(instance)}`);
+        const qrData = connectRes.data?.qrcode?.base64 || connectRes.data?.base64 || connectRes.data?.qrcode || connectRes.data?.code;
+        if (qrData) {
+          return {
+            success: true,
+            qrcode: qrData,
+            base64: qrData,
+            pairingCode: connectRes.data?.pairingCode,
+            data: connectRes.data,
+          };
+        }
       }
+
+      // If no QR was returned, delete old instance session and create new
+      try {
+        await client.delete(`/instance/delete/${encodeURIComponent(instance)}`);
+      } catch (e: any) {}
+      await new Promise((r) => setTimeout(r, 1000));
+
+      const createRes = await client.post('/instance/create', {
+        instanceName: instance,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+      });
+      const qrData = createRes.data?.qrcode?.base64 || createRes.data?.base64 || createRes.data?.qrcode || createRes.data?.code;
       return {
         success: true,
-        data: connectRes.data,
+        qrcode: qrData,
+        base64: qrData,
+        data: createRes.data,
       };
-    } catch (connectError: any) {
-      // 2. If instance doesn't exist, create it
-      try {
-        const createRes = await client.post('/instance/create', {
-          instanceName: instance,
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-        });
-        const qrData = createRes.data?.qrcode?.base64 || createRes.data?.base64 || createRes.data?.qrcode || createRes.data?.code;
-        return {
-          success: true,
-          qrcode: qrData,
-          base64: qrData,
-          data: createRes.data,
-        };
-      } catch (createError: any) {
-        const errMsg = createError.response?.data?.response?.message || createError.response?.data?.message || createError.message;
-        return {
-          success: false,
-          error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg,
-        };
-      }
+    } catch (createError: any) {
+      const errMsg = createError.response?.data?.response?.message || createError.response?.data?.message || createError.message;
+      return {
+        success: false,
+        error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg,
+      };
     }
   }
 
@@ -205,7 +214,6 @@ export class EvolutionService {
       const res = await client.delete(`/instance/logout/${encodeURIComponent(instance)}`);
       return { success: true, data: res.data, message: `"${instance}" oturumu kapatıldı.` };
     } catch (error: any) {
-      // Also try instance delete or disconnect
       try {
         const { client, instance } = await getClient(customName);
         const delRes = await client.delete(`/instance/delete/${encodeURIComponent(instance)}`);

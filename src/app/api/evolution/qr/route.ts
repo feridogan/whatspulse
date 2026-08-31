@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const instance = searchParams.get('instance') || undefined;
-    const result = await EvolutionService.createInstance(instance);
+    const forceRefresh = searchParams.get('refresh') === 'true';
+    const result = await EvolutionService.createInstance(instance, forceRefresh);
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const instance = body.instanceName || body.instance || undefined;
-    const result = await EvolutionService.createInstance(instance);
+    const forceRefresh = body.refresh === true || body.forceRefresh === true;
+    const result = await EvolutionService.createInstance(instance, forceRefresh);
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
