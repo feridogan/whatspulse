@@ -28,12 +28,15 @@ export default function TemplatesPage() {
   });
 
   const availableTags = [
-    { tag: '{isim}', label: 'Kişi Adı', sample: 'Ahmet Yılmaz' },
+    { tag: '{ad}', label: 'Ad', sample: 'Ahmet' },
+    { tag: '{soyad}', label: 'Soyad', sample: 'Yılmaz' },
+    { tag: '{isim}', label: 'Tam İsim', sample: 'Ahmet Yılmaz' },
     { tag: '{telefon}', label: 'Telefon', sample: '+90 532 123 45 67' },
+    { tag: '{firma}', label: 'Firma / Şirket', sample: 'Çakırlar A.Ş.' },
+    { tag: '{sehir}', label: 'Şehir', sample: 'İstanbul' },
+    { tag: '{borc}', label: 'Borç / Tutar', sample: '1.250 TL' },
     { tag: '{tarih}', label: 'Bugünün Tarihi', sample: new Date().toLocaleDateString('tr-TR') },
     { tag: '{saat}', label: 'Saat', sample: '14:30' },
-    { tag: '{sirket}', label: 'Şirket Adı', sample: 'Çakırlar A.Ş.' },
-    { tag: '{ozel_1}', label: 'Özel Alan 1', sample: 'PULSE20' },
   ];
 
   const loadTemplates = async () => {
@@ -91,27 +94,29 @@ export default function TemplatesPage() {
     }
   };
 
-  const previewText = replacePlaceholders(form.content || 'Merhaba {isim}, WhatsPulse ile hazırlanan mesaj önizlemesi!', {
+  const previewText = replacePlaceholders(form.content || 'Sayın {ad} {soyad}, {firma} adına düzenlenen mesajınız hazır!', {
+    ad: 'Ahmet',
+    soyad: 'Yılmaz',
     isim: 'Ahmet Yılmaz',
-    name: 'Ahmet Yılmaz',
     telefon: '905321234567',
-    sirket: 'Çakırlar A.Ş.',
-    ozel_1: 'PULSE20',
+    firma: 'Çakırlar A.Ş.',
+    sehir: 'İstanbul',
+    borc: '1.250 TL',
   });
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
               {templates.length} Hazır Şablon
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Mesaj Şablonları</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Mesaj Şablonları & Değişkenler</h1>
           <p className="text-xs text-gray-400">
-            Dinamik değişkenler (&#123;isim&#125;, &#123;tarih&#125;) ve medya ekleriyle kişiselleştirilmiş şablonlar oluşturun.
+            Dinamik etiketler (&#123;ad&#125;, &#123;soyad&#125;, &#123;firma&#125;) ve medya ekleriyle kişiye özel mesaj hazırlayın.
           </p>
         </div>
 
@@ -127,7 +132,7 @@ export default function TemplatesPage() {
       {/* Templates Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {templates.map((tpl) => (
-          <div key={tpl.id} className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+          <div key={tpl.id} className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all shadow-lg">
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold text-white flex items-center gap-2">
@@ -208,7 +213,7 @@ export default function TemplatesPage() {
                         key={item.tag}
                         type="button"
                         onClick={() => handleInsertTag(item.tag)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono transition-colors"
+                        className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono transition-colors"
                       >
                         + {item.tag}
                       </button>
@@ -223,7 +228,7 @@ export default function TemplatesPage() {
                     required
                     value={form.content}
                     onChange={(e) => setForm({ ...form, content: e.target.value })}
-                    placeholder="Merhaba {isim}, size özel fırsatlarımız..."
+                    placeholder="Sayın {ad} {soyad}, size özel fırsatlarımız..."
                     className="w-full bg-[#202c33] border border-gray-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
                   />
                 </div>

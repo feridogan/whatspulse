@@ -1,29 +1,36 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   UserPlus, 
   Upload, 
-  Smartphone, 
   Search, 
-  Filter, 
   Trash2, 
   Edit2, 
   Tag, 
-  RefreshCw, 
   FileSpreadsheet, 
-  Contact as ContactIcon,
-  CheckCircle,
-  FolderPlus,
-  ShieldAlert,
-  ShieldCheck
+  FolderPlus, 
+  ShieldAlert, 
+  ShieldCheck, 
+  Download, 
+  CheckSquare, 
+  Square, 
+  X, 
+  Plus, 
+  Layers, 
+  CheckCircle2, 
+  AlertCircle, 
+  FileText, 
+  ArrowRight,
+  Filter,
+  MoreHorizontal,
+  ChevronDown
 } from 'lucide-react';
-import { formatPhoneDisplay } from '@/lib/utils';
+import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 export default function ContactsPage() {
-  const router = useRouter();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>('');
@@ -32,79 +39,54 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
 
-  // Modals
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
+  // Multi-select for bulk actions
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
-  // Add Contact Form
+  // Modals
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<any | null>(null);
+  const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<any | null>(null);
+
+  // Contact Form State
   const [contactForm, setContactForm] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     email: '',
     notes: '',
+    isBlacklisted: false,
     groupIds: [] as string[],
+    customFields: [] as Array<{ key: string; value: string }>,
   });
 
-  // Group Form
+  // Group Form State
   const [groupForm, setGroupForm] = useState({
     name: '',
     description: '',
     color: '#10b981',
   });
 
-  // File Import
+  // Import Wizard State
+  const [importStep, setImportStep] = useState<1 | 2 | 3 | 4>(1);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importGroupId, setImportGroupId] = useState<string>('');
-  const [importing, setImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importTargetGroup, setImportTargetGroup] = useState<string>('');
+  const [importNewGroupName, setImportNewGroupName] = useState<string>('');
+  const [excelRawHeaders, setExcelRawHeaders] = useState<string[]>([]);
+  const [excelRawRows, setExcelRawRows] = useState<any[]>([]);
+  const [columnMapping, setColumnMapping] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    notes: '',
+  });
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<any | null>(null);
 
-  // Native Contact Picker support check
-  const [supportsNativePicker, setSupportsNativePicker] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Evolution WhatsApp Sync
-  const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const handleSyncEvolution = async () => {
-    try {
-      setSyncing(true);
-      setSyncStatus(null);
-      let res = await fetch('/api/contacts/sync', { method: 'POST' });
-      if (!res.ok && res.status === 404) {
-        res = await fetch('/api/evolution/sync', { method: 'POST' });
-      }
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const count = typeof data.contactsCount === 'number' ? data.contactsCount : data.synced?.totalContacts;
-        const gCount = typeof data.groupsCount === 'number' ? data.groupsCount : data.synced?.totalGroups;
-        
-        setSyncStatus({
-          type: 'success',
-          text: `✅ ${data.message || `Senkronizasyon Başarılı: ${count || 0} Kişi ve ${gCount || 0} Grup yüklendi.`}`,
-        });
-        if (typeof count === 'number') {
-          setTotal(count);
-        }
-        await Promise.all([loadContacts(), loadGroups()]);
-        router.refresh();
-      } else {
-        const errorMsg = data.error || (data.step ? `Hata [${data.step}]: ${JSON.stringify(data)}` : 'WhatsApp senkronizasyonu tamamlanamadı.');
-        setSyncStatus({
-          type: 'error',
-          text: `❌ ${errorMsg}`,
-        });
-      }
-    } catch (err: any) {
-      setSyncStatus({
-        type: 'error',
-        text: '❌ Bağlantı hatası: ' + err.message,
-      });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
+  // Load Contacts
   const loadContacts = async () => {
     try {
       setLoading(true);
@@ -117,12 +99,13 @@ export default function ContactsPage() {
       setContacts(data.contacts || []);
       setTotal(data.total || 0);
     } catch (err) {
-      console.error(err);
+      console.error('Kişiler yüklenirken hata:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  // Load Groups
   const loadGroups = async () => {
     try {
       const res = await fetch('/api/groups');
@@ -131,87 +114,119 @@ export default function ContactsPage() {
         setGroups(data);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Gruplar yüklenirken hata:', err);
     }
   };
 
   useEffect(() => {
     loadContacts();
-    loadGroups();
-    // Check Web Contact Picker API
-    if (typeof window !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window) {
-      setSupportsNativePicker(true);
-    }
   }, [search, selectedGroup]);
 
-  // Web Contact Picker API handler
-  const handleNativeContactPicker = async () => {
-    try {
-      if (!('contacts' in navigator)) {
-        alert('Bu cihaz veya tarayıcı Web Contact Picker API özelliğini desteklemiyor. Lütfen dosya yükleme seçeneğini kullanın.');
-        return;
+  useEffect(() => {
+    loadGroups();
+  }, []);
+
+  // Open Add/Edit Contact Modal
+  const handleOpenContactModal = (contact?: any) => {
+    if (contact) {
+      setEditingContact(contact);
+      const parts = (contact.name || '').split(/\s+/);
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ') || '';
+
+      const customArr: Array<{ key: string; value: string }> = [];
+      if (contact.customFields && typeof contact.customFields === 'object') {
+        for (const [k, v] of Object.entries(contact.customFields)) {
+          customArr.push({ key: k, value: String(v) });
+        }
       }
 
-      const props = ['name', 'tel', 'email'];
-      const opts = { multiple: true };
-      const selected = await (navigator as any).contacts.select(props, opts);
-
-      if (Array.isArray(selected) && selected.length > 0) {
-        const mapped = selected.map((item: any) => ({
-          name: item.name?.[0] || 'Rehber Kişisi',
-          phone: item.tel?.[0] || '',
-          email: item.email?.[0] || '',
-        }));
-
-        setImporting(true);
-        const res = await fetch('/api/contacts/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contacts: mapped, groupId: selectedGroup || undefined }),
-        });
-        const resData = await res.json();
-        alert(resData.message || 'Kişiler başarıyla rehbere aktarıldı!');
-        loadContacts();
-      }
-    } catch (err: any) {
-      console.error('Contact picker error:', err);
-    } finally {
-      setImporting(false);
+      setContactForm({
+        firstName,
+        lastName,
+        phone: contact.phone || '',
+        email: contact.email || '',
+        notes: contact.notes || '',
+        isBlacklisted: Boolean(contact.isBlacklisted),
+        groupIds: contact.groups?.map((g: any) => g.groupId || g.group?.id).filter(Boolean) || [],
+        customFields: customArr,
+      });
+    } else {
+      setEditingContact(null);
+      setContactForm({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        email: '',
+        notes: '',
+        isBlacklisted: false,
+        groupIds: selectedGroup ? [selectedGroup] : [],
+        customFields: [
+          { key: 'Firma', value: '' },
+          { key: 'Şehir', value: '' },
+        ],
+      });
     }
+    setShowContactModal(true);
   };
 
+  // Save Contact (Create or Update)
   const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/contacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contactForm),
+      const fullName = `${contactForm.firstName.trim()} ${contactForm.lastName.trim()}`.trim();
+      const customObj: Record<string, any> = {};
+      contactForm.customFields.forEach((cf) => {
+        if (cf.key.trim()) {
+          customObj[cf.key.trim()] = cf.value.trim();
+        }
       });
+
+      const payload = {
+        name: fullName || `Kişi ${contactForm.phone.slice(-4)}`,
+        phone: contactForm.phone,
+        email: contactForm.email || undefined,
+        notes: contactForm.notes || undefined,
+        isBlacklisted: contactForm.isBlacklisted,
+        groupIds: contactForm.groupIds,
+        customFields: customObj,
+      };
+
+      let res;
+      if (editingContact) {
+        res = await fetch(`/api/contacts/${editingContact.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch('/api/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+
       const data = await res.json();
       if (res.ok) {
-        setShowAddModal(false);
-        setContactForm({ name: '', phone: '', email: '', notes: '', groupIds: [] });
+        setShowContactModal(false);
         loadContacts();
+        loadGroups();
       } else {
-        alert(data.error || 'Kayıt sırasında hata oluştu.');
+        alert(data.error || 'İşlem başarısız oldu.');
       }
     } catch (err: any) {
-      alert(err.message);
+      alert('Hata: ' + err.message);
     }
   };
 
-  const handleCreateGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Delete Single Contact
+  const handleDeleteContact = async (id: string) => {
+    if (!confirm('Bu kişiyi silmek istediğinize emin misiniz?')) return;
     try {
-      const res = await fetch('/api/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(groupForm),
-      });
+      const res = await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setShowGroupModal(false);
-        setGroupForm({ name: '', description: '', color: '#10b981' });
+        loadContacts();
         loadGroups();
       }
     } catch (err) {
@@ -219,264 +234,617 @@ export default function ContactsPage() {
     }
   };
 
-  const handleFileUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!importFile) return;
-
-    setImporting(true);
-    setImportStatus(null);
-
+  // Bulk Delete Selected Contacts
+  const handleBulkDelete = async () => {
+    if (selectedContactIds.length === 0) return;
+    if (!confirm(`Seçili ${selectedContactIds.length} kişiyi silmek istediğinize emin misiniz?`)) return;
     try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-      if (importGroupId) formData.append('groupId', importGroupId);
-
-      const res = await fetch('/api/contacts/import', {
-        method: 'POST',
-        body: formData,
+      const res = await fetch('/api/contacts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedContactIds }),
       });
-
-      const data = await res.json();
       if (res.ok) {
-        setImportStatus(`✅ ${data.message}`);
-        setTimeout(() => {
-          setShowImportModal(false);
-          setImportFile(null);
-          setImportStatus(null);
-          loadContacts();
-        }, 1500);
-      } else {
-        setImportStatus(`❌ ${data.error}`);
+        setSelectedContactIds([]);
+        loadContacts();
+        loadGroups();
       }
-    } catch (err: any) {
-      setImportStatus(`❌ ${err.message}`);
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleDeleteContact = async (id: string) => {
-    if (!confirm('Bu kişiyi silmek istediğinize emin misiniz?')) return;
-    try {
-      await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
-      loadContacts();
     } catch (err) {
       console.error(err);
     }
   };
 
+  // Group Create/Edit Modal
+  const handleOpenGroupModal = (group?: any) => {
+    if (group) {
+      setEditingGroup(group);
+      setGroupForm({
+        name: group.name,
+        description: group.description || '',
+        color: group.color || '#10b981',
+      });
+    } else {
+      setEditingGroup(null);
+      setGroupForm({
+        name: '',
+        description: '',
+        color: '#10b981',
+      });
+    }
+    setShowGroupModal(true);
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      let res;
+      if (editingGroup) {
+        res = await fetch(`/api/groups/${editingGroup.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(groupForm),
+        });
+      } else {
+        res = await fetch('/api/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(groupForm),
+        });
+      }
+
+      const data = await res.json();
+      if (res.ok) {
+        setShowGroupModal(false);
+        loadGroups();
+      } else {
+        alert(data.error || 'Grup kaydedilemedi.');
+      }
+    } catch (err: any) {
+      alert('Hata: ' + err.message);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!confirm('Bu grubu silmek istediğinize emin misiniz? Gruptaki kişiler silinmez.')) return;
+    try {
+      const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (selectedGroup === groupId) setSelectedGroup('');
+        loadGroups();
+        loadContacts();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Export Contacts to Excel
+  const handleExportExcel = (groupId?: string) => {
+    const url = groupId 
+      ? `/api/contacts/export?groupId=${encodeURIComponent(groupId)}` 
+      : selectedGroup 
+        ? `/api/contacts/export?groupId=${encodeURIComponent(selectedGroup)}` 
+        : `/api/contacts/export`;
+    window.open(url, '_blank');
+  };
+
+  // Import Wizard File Selected
+  const handleFileDropOrSelect = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+    let file: File | null = null;
+    if ('dataTransfer' in e) {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        file = e.dataTransfer.files[0];
+      }
+    } else if (e.target.files && e.target.files[0]) {
+      file = e.target.files[0];
+    }
+
+    if (!file) return;
+    setImportFile(file);
+
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.vcf') || name.endsWith('.vcard')) {
+      // vCard doesn't need column mapping, jump to Step 3
+      setImportStep(3);
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
+      // Parse columns for wizard
+      try {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'buffer' });
+        const firstSheet = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheet];
+        const json: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (json.length > 0) {
+          const headers = Object.keys(json[0]);
+          setExcelRawHeaders(headers);
+          setExcelRawRows(json.slice(0, 5));
+
+          // Auto-guess columns
+          let guessedName = '';
+          let guessedPhone = '';
+          let guessedEmail = '';
+          let guessedNotes = '';
+
+          headers.forEach((h) => {
+            const lh = h.toLowerCase().trim();
+            if (['ad', 'isim', 'ad soyad', 'name', 'full name', 'fullname', 'müşteri'].includes(lh)) guessedName = h;
+            if (['tel', 'telefon', 'phone', 'gsm', 'mobile', 'cep', 'numara'].includes(lh)) guessedPhone = h;
+            if (['email', 'e-posta', 'eposta', 'mail'].includes(lh)) guessedEmail = h;
+            if (['not', 'notes', 'açıklama'].includes(lh)) guessedNotes = h;
+          });
+
+          setColumnMapping({
+            name: guessedName || headers[0] || '',
+            phone: guessedPhone || headers[1] || headers[0] || '',
+            email: guessedEmail || '',
+            notes: guessedNotes || '',
+          });
+
+          setImportStep(2);
+        } else {
+          alert('Seçilen dosyada veri satırı bulunamadı.');
+        }
+      } catch (err: any) {
+        alert('Dosya okunurken hata oluştu: ' + err.message);
+      }
+    } else {
+      alert('Lütfen geçerli bir .xlsx, .xls, .csv veya .vcf dosyası seçin.');
+    }
+  };
+
+  // Execute Import
+  const handleExecuteImport = async () => {
+    if (!importFile) return;
+    try {
+      setImportLoading(true);
+      setImportResult(null);
+
+      const name = importFile.name.toLowerCase();
+
+      if (name.endsWith('.vcf') || name.endsWith('.vcard')) {
+        const formData = new FormData();
+        formData.append('file', importFile);
+        if (importTargetGroup) formData.append('groupId', importTargetGroup);
+        if (importNewGroupName) formData.append('newGroupName', importNewGroupName);
+
+        const res = await fetch('/api/contacts/import', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        setImportResult(data);
+      } else {
+        // Excel / CSV with Column Mapping
+        const buffer = await importFile.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'buffer' });
+        const firstSheet = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheet];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        const mappedContacts = rows.map((row) => {
+          const rawName = columnMapping.name ? String(row[columnMapping.name] || '').trim() : '';
+          const rawPhone = columnMapping.phone ? String(row[columnMapping.phone] || '').trim() : '';
+          const rawEmail = columnMapping.email ? String(row[columnMapping.email] || '').trim() : '';
+          const rawNotes = columnMapping.notes ? String(row[columnMapping.notes] || '').trim() : '';
+
+          // Other unmapped columns become customFields
+          const customFields: Record<string, any> = {};
+          Object.keys(row).forEach((k) => {
+            if (k !== columnMapping.name && k !== columnMapping.phone && k !== columnMapping.email && k !== columnMapping.notes) {
+              const val = String(row[k] || '').trim();
+              if (val) customFields[k] = val;
+            }
+          });
+
+          return {
+            name: rawName,
+            phone: rawPhone,
+            email: rawEmail || undefined,
+            notes: rawNotes || undefined,
+            customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
+          };
+        });
+
+        const res = await fetch('/api/contacts/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contacts: mappedContacts,
+            groupId: importTargetGroup || undefined,
+            newGroupName: importNewGroupName || undefined,
+          }),
+        });
+
+        const data = await res.json();
+        setImportResult(data);
+      }
+
+      setImportStep(4);
+      loadContacts();
+      loadGroups();
+    } catch (err: any) {
+      alert('İçe aktarma hatası: ' + err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const selectedGroupObj = groups.find((g) => g.id === selectedGroup);
+
   return (
     <div className="space-y-6">
-      {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6">
+      {/* Top Header Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#111b21] to-[#14232c] border border-gray-800 rounded-3xl p-5 sm:p-6 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-              {total} Kayıtlı Kişi
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" /> Gelişmiş CRM
             </span>
+            <span className="text-xs text-gray-400">{total} Kayıtlı Kişi</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Kişi & Grup Yönetimi</h1>
-          <p className="text-xs text-gray-400">
-            Rehberinizi yönetin, gruplara ayırın, Excel veya telefon rehberinizden aktarın.
+          <h1 className="text-2xl font-bold text-white mt-1">Kişi ve Grup Yönetimi</h1>
+          <p className="text-xs sm:text-sm text-gray-400">
+            Rehberinizi yönetin, Excel/vCard ile aktarın, dinamik değişkenlerle gruplayın.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* WhatsApp Evolution Sync Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleSyncEvolution}
-            disabled={syncing}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
-            title="WhatsApp Evolution API rehber ve gruplarını senkronize et"
+            onClick={() => handleExportExcel()}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-gray-300 hover:text-white text-xs font-semibold border border-gray-700 transition-all shadow-md"
+            title="Tüm kişileri Excel olarak indir"
           >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Senkronize Ediliyor...' : "WhatsApp'tan Kişileri & Grupları Senkronize Et"}</span>
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Excel Dışa Aktar</span>
           </button>
 
-          {/* Mobile Contact Picker Button */}
           <button
-            onClick={handleNativeContactPicker}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 hover:from-teal-600 hover:to-cyan-600 text-white text-xs font-semibold shadow-md transition-all"
-            title="Cihaz rehberinden doğrudan kişi seçin"
+            onClick={() => {
+              setImportStep(1);
+              setImportFile(null);
+              setImportResult(null);
+              setShowImportWizard(true);
+            }}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition-all shadow-md"
           >
-            <Smartphone className="w-4 h-4" />
-            <span>Telefon Rehberinden Seç</span>
+            <Upload className="w-4 h-4" />
+            <span>İçe Aktar (Excel/vCard)</span>
           </button>
 
-          {/* Import File Button */}
           <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-gray-200 text-xs font-semibold border border-gray-700 transition-all"
-          >
-            <Upload className="w-4 h-4 text-emerald-400" />
-            <span>vCard / Excel Yükle</span>
-          </button>
-
-          {/* Add Contact Button */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all"
+            onClick={() => handleOpenContactModal()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Yeni Kişi</span>
+            <span>Yeni Kişi Ekle</span>
           </button>
         </div>
       </div>
 
-      {/* Sync Status Banner */}
-      {syncStatus && (
-        <div className={`p-4 rounded-2xl text-xs font-medium border animate-fade-in flex items-center justify-between gap-3 ${
-          syncStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
-        }`}>
-          <span>{syncStatus.text}</span>
+      {/* Tabs & Search Navigation */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-4">
+        {/* Left Tabs */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setSyncStatus(null)}
-            className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            onClick={() => setActiveTab('contacts')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'contacts'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-[#111b21] text-gray-400 hover:text-white border border-gray-800'
+            }`}
           >
-            ✕
+            <Users className="w-4 h-4" />
+            <span>Kişiler ({total})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('groups')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'groups'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-[#111b21] text-gray-400 hover:text-white border border-gray-800'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Gruplar ({groups.length})</span>
           </button>
         </div>
-      )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
-        <button
-          onClick={() => setActiveTab('contacts')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-            activeTab === 'contacts' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white bg-[#202c33]/40'
-          }`}
-        >
-          Kişiler ({total})
-        </button>
-        <button
-          onClick={() => setActiveTab('groups')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-            activeTab === 'groups' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white bg-[#202c33]/40'
-          }`}
-        >
-          Gruplar ({groups.length})
-        </button>
-      </div>
-
-      {activeTab === 'contacts' ? (
-        <>
-          {/* Filters & Search */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="İsim, telefon veya e-posta ile ara..."
-                className="w-full bg-[#111b21] border border-gray-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
+        {/* Right Search & Filter (Only on contacts tab) */}
+        {activeTab === 'contacts' && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Group Filter Dropdown */}
+            <div className="relative">
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
-                className="bg-[#111b21] border border-gray-800 rounded-2xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="appearance-none bg-[#111b21] border border-gray-800 rounded-xl px-3.5 py-2 pr-8 text-xs text-white focus:outline-none focus:border-emerald-500 transition-all cursor-pointer"
               >
-                <option value="">Tüm Gruplar</option>
+                <option value="">Tüm Gruplar ({groups.length})</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name} ({g._count?.contacts || 0})
+                    {g.name} ({g._count?.contacts || 0} Kişi)
                   </option>
                 ))}
               </select>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-3 pointer-events-none" />
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="İsim, telefon, e-posta ara..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-[#111b21] border border-gray-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-all w-48 sm:w-64"
+              />
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Contacts Table / Grid */}
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#202c33]/60 text-gray-400 font-semibold border-b border-gray-800">
+      {/* Selected Group Filter Banner */}
+      {activeTab === 'contacts' && selectedGroupObj && (
+        <div className="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedGroupObj.color || '#10b981' }} />
+            <span className="text-xs font-bold text-white">
+              Grup Filtresi: <span className="text-emerald-400">{selectedGroupObj.name}</span>
+            </span>
+            <span className="text-[11px] text-gray-400">({total} kişi listeleniyor)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleExportExcel(selectedGroupObj.id)}
+              className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+            >
+              <Download className="w-3 h-3" /> Grubu Excel İndir
+            </button>
+            <button
+              onClick={() => setSelectedGroup('')}
+              className="p-1 rounded text-gray-400 hover:text-white text-xs"
+              title="Filtreyi Temizle"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Bar (When items selected) */}
+      {activeTab === 'contacts' && selectedContactIds.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-[#202c33] border border-emerald-500/40 flex items-center justify-between shadow-lg animate-fade-in">
+          <div className="flex items-center gap-2 text-xs font-bold text-white">
+            <CheckSquare className="w-4 h-4 text-emerald-400" />
+            <span>{selectedContactIds.length} kişi seçildi</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Seçilenleri Sil</span>
+            </button>
+            <button
+              onClick={() => setSelectedContactIds([])}
+              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+            >
+              Vazgeç
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content */}
+      {activeTab === 'contacts' ? (
+        /* Contacts Table View */
+        <div className="bg-[#111b21] border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-800 bg-[#14232c]/60 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  <th className="p-4 w-10 text-center">
+                    <button
+                      onClick={() => {
+                        if (selectedContactIds.length === contacts.length) {
+                          setSelectedContactIds([]);
+                        } else {
+                          setSelectedContactIds(contacts.map((c) => c.id));
+                        }
+                      }}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      {selectedContactIds.length === contacts.length && contacts.length > 0 ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="p-4">Kişi Bilgisi</th>
+                  <th className="p-4">Telefon Numarası</th>
+                  <th className="p-4">Gruplar</th>
+                  <th className="p-4">Özel Değişkenler</th>
+                  <th className="p-4">Durum</th>
+                  <th className="p-4 text-right">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/60 text-xs">
+                {loading ? (
                   <tr>
-                    <th className="p-4">Kişi Adı</th>
-                    <th className="p-4">Telefon Numarası</th>
-                    <th className="p-4 hidden sm:table-cell">Gruplar</th>
-                    <th className="p-4 hidden md:table-cell">E-Posta / Not</th>
-                    <th className="p-4 text-right">İşlemler</th>
+                    <td colSpan={7} className="p-12 text-center text-gray-400">
+                      Yükleniyor...
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/60">
-                  {contacts.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-gray-500">
-                        {loading ? 'Yükleniyor...' : 'Kayıtlı kişi bulunamadı.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    contacts.map((c) => (
-                      <tr key={c.id} className="hover:bg-[#202c33]/30 transition-colors">
+                ) : contacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center text-gray-400 space-y-3">
+                      <Users className="w-10 h-10 text-gray-600 mx-auto" />
+                      <p className="text-sm font-semibold text-white">Kayıtlı kişi bulunamadı.</p>
+                      <p className="text-xs text-gray-500">
+                        {search || selectedGroup ? 'Filtrelemeye uygun kişi bulunamadı.' : 'Yeni kişi ekleyin veya Excel / vCard ile içe aktarın.'}
+                      </p>
+                      <button
+                        onClick={() => handleOpenContactModal()}
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold"
+                      >
+                        <UserPlus className="w-4 h-4" /> Yeni Kişi Ekle
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  contacts.map((c) => {
+                    const isSelected = selectedContactIds.includes(c.id);
+                    const customObj = (c.customFields && typeof c.customFields === 'object') ? c.customFields : {};
+                    const customEntries = Object.entries(customObj);
+
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`hover:bg-[#162229] transition-colors ${
+                          isSelected ? 'bg-emerald-950/20' : ''
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedContactIds(selectedContactIds.filter((id) => id !== c.id));
+                              } else {
+                                setSelectedContactIds([...selectedContactIds, c.id]);
+                              }
+                            }}
+                            className="text-gray-400 hover:text-white"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Name & Avatar */}
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-emerald-800/80 flex items-center justify-center text-emerald-300 font-bold">
-                              {c.name.charAt(0).toUpperCase()}
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
+                              {c.name?.slice(0, 2).toUpperCase() || 'K'}
                             </div>
-                            <div>
-                              <div className="font-semibold text-white flex items-center gap-1.5">
-                                <span>{c.name}</span>
-                                {c.isBlacklisted && (
-                                  <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-400 text-[10px]">
-                                    Kara Liste
-                                  </span>
-                                )}
-                              </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-white text-sm truncate">{c.name}</div>
+                              {c.email && (
+                                <div className="text-[11px] text-gray-400 truncate">{c.email}</div>
+                              )}
+                              {c.notes && (
+                                <div className="text-[10px] text-gray-500 truncate max-w-xs">{c.notes}</div>
+                              )}
                             </div>
                           </div>
                         </td>
-                        <td className="p-4 font-mono text-gray-300">
+
+                        {/* Phone */}
+                        <td className="p-4 font-mono font-semibold text-emerald-400">
                           {formatPhoneDisplay(c.phone)}
                         </td>
-                        <td className="p-4 hidden sm:table-cell">
-                          <div className="flex flex-wrap gap-1">
+
+                        {/* Groups */}
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1.5 max-w-xs">
                             {c.groups && c.groups.length > 0 ? (
-                              c.groups.map((cg: any) => (
+                              c.groups.map((g: any) => (
                                 <span
-                                  key={cg.groupId}
-                                  className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                                  key={g.groupId || g.group?.id}
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                                  style={{
+                                    backgroundColor: `${g.group?.color || '#10b981'}15`,
+                                    borderColor: `${g.group?.color || '#10b981'}40`,
+                                    color: g.group?.color || '#10b981',
+                                  }}
                                 >
-                                  {cg.group?.name}
+                                  {g.group?.name}
                                 </span>
                               ))
                             ) : (
-                              <span className="text-gray-500 text-[11px]">-</span>
+                              <span className="text-[11px] text-gray-500">-</span>
                             )}
                           </div>
                         </td>
-                        <td className="p-4 hidden md:table-cell text-gray-400">
-                          <div>{c.email || '-'}</div>
-                          {c.notes && <div className="text-[10px] text-gray-500 truncate max-w-xs">{c.notes}</div>}
+
+                        {/* Custom Fields */}
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {customEntries.length > 0 ? (
+                              customEntries.slice(0, 3).map(([k, v]) => (
+                                <span
+                                  key={k}
+                                  className="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] text-gray-300 border border-gray-700 truncate"
+                                >
+                                  <span className="text-gray-500 font-semibold">{k}:</span> {String(v)}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-gray-600">-</span>
+                            )}
+                            {customEntries.length > 3 && (
+                              <span className="text-[10px] text-gray-500">+{customEntries.length - 3}</span>
+                            )}
+                          </div>
                         </td>
+
+                        {/* Status */}
+                        <td className="p-4">
+                          {c.isBlacklisted ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <ShieldAlert className="w-3 h-3" /> Kara Liste
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <ShieldCheck className="w-3 h-3" /> Aktif
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
                         <td className="p-4 text-right">
-                          <button
-                            onClick={() => handleDeleteContact(c.id)}
-                            className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors"
-                            title="Sil"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenContactModal(c)}
+                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                              title="Düzenle"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteContact(c.id)}
+                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
       ) : (
-        /* Groups View */
+        /* Groups Cards View */
         <div className="space-y-4">
           <div className="flex justify-end">
             <button
-              onClick={() => setShowGroupModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md"
+              onClick={() => handleOpenGroupModal()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md"
             >
               <FolderPlus className="w-4 h-4" />
               <span>Yeni Grup Oluştur</span>
@@ -485,38 +853,66 @@ export default function ContactsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {groups.map((g) => {
-              const countMatch = g.description?.match(/\((\d+)\s+Katılımcı\)/);
-              const badgeText = (g._count?.contacts && g._count.contacts > 0) 
-                ? `${g._count.contacts} Kişi` 
-                : countMatch ? `${countMatch[1]} Katılımcı` : 'WhatsApp Grubu';
-
+              const count = g._count?.contacts || 0;
               return (
-                <div key={g.id} className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                <div
+                  key={g.id}
+                  className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 flex flex-col justify-between hover:border-emerald-500/40 transition-all group shadow-lg"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2 gap-2">
-                      <span className="text-sm font-bold text-white flex items-center gap-2 truncate">
-                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color || '#10b981' }} />
-                        <span className="truncate">{g.name}</span>
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold shrink-0">
-                        {badgeText}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                          style={{ backgroundColor: g.color || '#10b981' }}
+                        />
+                        <h3 className="text-base font-bold text-white truncate">{g.name}</h3>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20 shrink-0">
+                        {count} Kişi
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 leading-relaxed break-all">
-                      {g.description || 'WhatsApp Grubu'}
+
+                    <p className="text-xs text-gray-400 leading-relaxed min-h-[32px]">
+                      {g.description || 'Açıklama girilmemiş.'}
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-gray-800/80 flex items-center justify-between text-xs">
+                  <div className="mt-4 pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs">
                     <button
                       onClick={() => {
                         setSelectedGroup(g.id);
                         setActiveTab('contacts');
                       }}
-                      className="text-emerald-400 hover:underline font-medium"
+                      className="text-emerald-400 hover:underline font-semibold flex items-center gap-1"
                     >
-                      Kişileri Listele →
+                      <span>Kişileri Listele</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleExportExcel(g.id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+                        title="Excel İndir"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenGroupModal(g)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+                        title="Düzenle"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGroup(g.id)}
+                        className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                        title="Grubu Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -525,80 +921,308 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Add Contact Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-emerald-400" />
-              Yeni Kişi Ekle
-            </h3>
-            <form onSubmit={handleSaveContact} className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Ad Soyad</label>
-                <input
-                  type="text"
-                  required
-                  value={contactForm.name}
-                  onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                  placeholder="Örn: Ahmet Yılmaz"
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
+      {/* ========================================================================= */}
+      {/* 1. Add / Edit Contact Modal */}
+      {/* ========================================================================= */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-400" />
+                {editingContact ? 'Kişiyi Düzenle' : 'Yeni CRM Kişisi Ekle'}
+              </h3>
+              <button
+                onClick={() => setShowContactModal(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveContact} className="space-y-4">
+              {/* Ad & Soyad */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">Ad *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ahmet"
+                    value={contactForm.firstName}
+                    onChange={(e) => setContactForm({ ...contactForm, firstName: e.target.value })}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">Soyad</label>
+                  <input
+                    type="text"
+                    placeholder="Yılmaz"
+                    value={contactForm.lastName}
+                    onChange={(e) => setContactForm({ ...contactForm, lastName: e.target.value })}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Telefon Numarası</label>
-                <input
-                  type="text"
-                  required
-                  value={contactForm.phone}
-                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-                  placeholder="905xxxxxxxxx"
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
+              {/* Telefon & E-Posta */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Telefon Numarası *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0535 123 45 67 veya +905..."
+                    value={contactForm.phone}
+                    onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  {contactForm.phone && (
+                    <div className="text-[10px] text-emerald-400 mt-1 font-mono">
+                      Format: {formatPhoneDisplay(contactForm.phone)}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">E-Posta</label>
+                  <input
+                    type="email"
+                    placeholder="ahmet@example.com"
+                    value={contactForm.email}
+                    onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
+              {/* Grup Seçimi (Multi-Select) */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1">E-Posta (İsteğe Bağlı)</label>
-                <input
-                  type="email"
-                  value={contactForm.email}
-                  onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                  placeholder="ahmet@example.com"
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                  Dahil Olduğu Gruplar
+                </label>
+                <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-[#202c33]/50 border border-gray-700">
+                  {groups.length === 0 ? (
+                    <span className="text-xs text-gray-500">Henüz grup oluşturulmamış.</span>
+                  ) : (
+                    groups.map((g) => {
+                      const isChecked = contactForm.groupIds.includes(g.id);
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => {
+                            if (isChecked) {
+                              setContactForm({
+                                ...contactForm,
+                                groupIds: contactForm.groupIds.filter((id) => id !== g.id),
+                              });
+                            } else {
+                              setContactForm({
+                                ...contactForm,
+                                groupIds: [...contactForm.groupIds, g.id],
+                              });
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                            isChecked
+                              ? 'bg-emerald-600 text-white border-emerald-500'
+                              : 'bg-[#111b21] text-gray-400 border-gray-800 hover:text-white'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color || '#10b981' }} />
+                          <span>{g.name}</span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Grup Seçimi</label>
-                <select
-                  multiple
-                  value={contactForm.groupIds}
-                  onChange={(e) => {
-                    const selected = Array.from(e.target.selectedOptions, option => option.value);
-                    setContactForm({ ...contactForm, groupIds: selected });
-                  }}
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                >
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
+              {/* Dinamik Özel Alanlar / Değişkenler (JSON key/value) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-300">
+                    Özel Değişkenler (Şablonlarda &#123;etiket&#125; olarak kullanılır)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContactForm({
+                        ...contactForm,
+                        customFields: [...contactForm.customFields, { key: '', value: '' }],
+                      });
+                    }}
+                    className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Değişken Ekle
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-36 overflow-y-auto">
+                  {contactForm.customFields.map((cf, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Örn: Firma, Borç, Şehir"
+                        value={cf.key}
+                        onChange={(e) => {
+                          const updated = [...contactForm.customFields];
+                          updated[idx].key = e.target.value;
+                          setContactForm({ ...contactForm, customFields: updated });
+                        }}
+                        className="w-1/3 bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Değer (Örn: ABC Ltd, 500 TL)"
+                        value={cf.value}
+                        onChange={(e) => {
+                          const updated = [...contactForm.customFields];
+                          updated[idx].value = e.target.value;
+                          setContactForm({ ...contactForm, customFields: updated });
+                        }}
+                        className="flex-1 bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = contactForm.customFields.filter((_, i) => i !== idx);
+                          setContactForm({ ...contactForm, customFields: updated });
+                        }}
+                        className="p-2 text-gray-500 hover:text-rose-400"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
-                </select>
+                </div>
+              </div>
+
+              {/* Notlar */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Özel Notlar</label>
+                <textarea
+                  rows={2}
+                  placeholder="Müşteri hakkında özel açıklamalar..."
+                  value={contactForm.notes}
+                  onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })}
+                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              {/* Durum (Kara Liste Toggle) */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#202c33]/50 border border-gray-700">
+                <div>
+                  <span className="text-xs font-bold text-white block">Kara Liste (Opt-Out Durumu)</span>
+                  <span className="text-[10px] text-gray-400">
+                    Açık olduğunda toplu mesaj kampanyalarında mesaj gönderilmez.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={contactForm.isBlacklisted}
+                  onChange={(e) => setContactForm({ ...contactForm, isBlacklisted: e.target.checked })}
+                  className="w-5 h-5 rounded bg-gray-800 border-gray-700 text-rose-500 focus:ring-rose-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowContactModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/20"
+                >
+                  {editingContact ? 'Değişiklikleri Kaydet' : 'Kişiyi Kaydet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. Group Create / Edit Modal */}
+      {/* ========================================================================= */}
+      {showGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <FolderPlus className="w-5 h-5 text-emerald-400" />
+                {editingGroup ? 'Grubu Düzenle' : 'Yeni Grup Oluştur'}
+              </h3>
+              <button
+                onClick={() => setShowGroupModal(false)}
+                className="p-1 rounded text-gray-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGroup} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Grup Adı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: VIP Müşteriler, İstanbul Şubesi"
+                  value={groupForm.name}
+                  onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Açıklama</label>
+                <textarea
+                  rows={2}
+                  placeholder="Bu grubun amacı veya kapsamı..."
+                  value={groupForm.description}
+                  onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
+                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5">Renk Etiketi</label>
+                <div className="flex items-center gap-2">
+                  {['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4'].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setGroupForm({ ...groupForm, color: c })}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${
+                        groupForm.color === c ? 'scale-110 border-white' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-2 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300"
+                  onClick={() => setShowGroupModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/20"
                 >
-                  Kaydet
+                  {editingGroup ? 'Güncelle' : 'Grup Oluştur'}
                 </button>
               </div>
             </form>
@@ -606,124 +1230,270 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* File Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-2 flex items-center gap-2">
-              <Upload className="w-4 h-4 text-emerald-400" />
-              vCard (.vcf) veya Excel/CSV Yükle
-            </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Apple/Android rehber dışa aktarımı (.vcf) veya Excel tablosunu (.xlsx, .csv) seçin.
-            </p>
+      {/* ========================================================================= */}
+      {/* 3. Excel / CSV / vCard Import Wizard Modal */}
+      {/* ========================================================================= */}
+      {showImportWizard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                Toplu Kişi İçe Aktarma Sihirbazı
+              </h3>
+              <button
+                onClick={() => setShowImportWizard(false)}
+                className="p-1 rounded text-gray-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            {importStatus && (
-              <div className="p-3 mb-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
-                {importStatus}
+            {/* Stepper */}
+            <div className="flex items-center justify-between mb-6 px-4">
+              {[
+                { s: 1, title: 'Dosya Yükle' },
+                { s: 2, title: 'Sütun Eşle' },
+                { s: 3, title: 'Hedef Grup' },
+                { s: 4, title: 'Sonuç' },
+              ].map((st) => (
+                <div key={st.s} className="flex items-center gap-2">
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      importStep >= st.s
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-gray-800 text-gray-500'
+                    }`}
+                  >
+                    {st.s}
+                  </span>
+                  <span
+                    className={`text-xs font-semibold hidden sm:inline ${
+                      importStep >= st.s ? 'text-white' : 'text-gray-500'
+                    }`}
+                  >
+                    {st.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Step 1: File Dropzone */}
+            {importStep === 1 && (
+              <div className="space-y-4">
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleFileDropOrSelect}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-700 hover:border-emerald-500/60 rounded-3xl p-8 text-center cursor-pointer bg-[#202c33]/30 hover:bg-[#202c33]/60 transition-all"
+                >
+                  <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-white">
+                    Dosyanızı buraya sürükleyin veya seçin
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Desteklenen formatlar: <span className="text-emerald-400 font-mono">.xlsx, .xls, .csv, .vcf</span>
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv,.vcf,.vcard"
+                    onChange={handleFileDropOrSelect}
+                    className="hidden"
+                  />
+                </div>
               </div>
             )}
 
-            <form onSubmit={handleFileUpload} className="space-y-4">
-              <div className="border-2 border-dashed border-gray-700 rounded-2xl p-6 text-center hover:border-emerald-500 transition-colors">
-                <FileSpreadsheet className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                <input
-                  type="file"
-                  required
-                  accept=".vcf,.vcard,.xlsx,.xls,.csv"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  className="block w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500"
-                />
-                {importFile && (
-                  <p className="text-xs text-emerald-400 mt-2 font-medium">
-                    Seçilen Dosya: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
-                  </p>
-                )}
-              </div>
+            {/* Step 2: Column Mapping Wizard (For Excel/CSV) */}
+            {importStep === 2 && (
+              <div className="space-y-4">
+                <p className="text-xs text-gray-400">
+                  Excel tablonuzdaki sütunları WhatsPulse CRM alanlarıyla eşleştirin:
+                </p>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Hedef Grup (İsteğe Bağlı)</label>
-                <select
-                  value={importGroupId}
-                  onChange={(e) => setImportGroupId(e.target.value)}
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="">Grup Seçmeyin (Varsayılan)</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#202c33]/40 p-4 rounded-2xl border border-gray-800">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Ad Soyad Sütunu *
+                    </label>
+                    <select
+                      value={columnMapping.name}
+                      onChange={(e) => setColumnMapping({ ...columnMapping, name: e.target.value })}
+                      className="w-full bg-[#111b21] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      {excelRawHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowImportModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  disabled={importing || !importFile}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white"
-                >
-                  {importing ? 'İçe Aktarılıyor...' : 'İçe Aktar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Telefon Numarası Sütunu *
+                    </label>
+                    <select
+                      value={columnMapping.phone}
+                      onChange={(e) => setColumnMapping({ ...columnMapping, phone: e.target.value })}
+                      className="w-full bg-[#111b21] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      {excelRawHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
 
-      {/* Group Create Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-              <FolderPlus className="w-4 h-4 text-emerald-400" />
-              Yeni Kişi Grubu
-            </h3>
-            <form onSubmit={handleCreateGroup} className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Grup Adı</label>
-                <input
-                  type="text"
-                  required
-                  value={groupForm.name}
-                  onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                  placeholder="Örn: VIP Müşteriler"
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      E-Posta Sütunu (Opsiyonel)
+                    </label>
+                    <select
+                      value={columnMapping.email}
+                      onChange={(e) => setColumnMapping({ ...columnMapping, email: e.target.value })}
+                      className="w-full bg-[#111b21] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      <option value="">-- Eşleştirme Yapma --</option>
+                      {excelRawHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Açıklama</label>
-                <textarea
-                  rows={2}
-                  value={groupForm.description}
-                  onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
-                  placeholder="Grubun kullanım amacı..."
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Not / Açıklama Sütunu
+                    </label>
+                    <select
+                      value={columnMapping.notes}
+                      onChange={(e) => setColumnMapping({ ...columnMapping, notes: e.target.value })}
+                      className="w-full bg-[#111b21] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      <option value="">-- Eşleştirme Yapma --</option>
+                      {excelRawHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowGroupModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
-                >
-                  Oluştur
-                </button>
+                <div className="flex justify-between gap-2 pt-2">
+                  <button
+                    onClick={() => setImportStep(1)}
+                    className="px-4 py-2 rounded-xl bg-gray-800 text-xs font-semibold text-gray-300"
+                  >
+                    Geri
+                  </button>
+                  <button
+                    onClick={() => setImportStep(3)}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5"
+                  >
+                    <span>Devam Et</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
+
+            {/* Step 3: Target Group Selection */}
+            {importStep === 3 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                    İçe Aktarılan Kişileri Bir Gruba Ata
+                  </label>
+                  <select
+                    value={importTargetGroup}
+                    onChange={(e) => {
+                      setImportTargetGroup(e.target.value);
+                      if (e.target.value) setImportNewGroupName('');
+                    }}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                  >
+                    <option value="">-- Herhangi bir gruba atama --</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-gray-800"></div>
+                  <span className="flex-shrink mx-3 text-gray-500 text-xs">VEYA</span>
+                  <div className="flex-grow border-t border-gray-800"></div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Yeni Grup Oluştur ve Otomatik Ata
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: 2026 Ağustos Müşteri Listesi"
+                    value={importNewGroupName}
+                    onChange={(e) => {
+                      setImportNewGroupName(e.target.value);
+                      if (e.target.value) setImportTargetGroup('');
+                    }}
+                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="flex justify-between gap-2 pt-3">
+                  <button
+                    onClick={() => setImportStep(excelRawHeaders.length > 0 ? 2 : 1)}
+                    className="px-4 py-2 rounded-xl bg-gray-800 text-xs font-semibold text-gray-300"
+                  >
+                    Geri
+                  </button>
+                  <button
+                    onClick={handleExecuteImport}
+                    disabled={importLoading}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-2 shadow-lg shadow-emerald-600/20"
+                  >
+                    {importLoading ? 'Aktarılıyor...' : 'İçe Aktarmayı Başlat'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Import Result Report */}
+            {importStep === 4 && importResult && (
+              <div className="space-y-4 text-center py-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+                <h4 className="text-base font-bold text-white">İçe Aktarma Tamamlandı!</h4>
+                <p className="text-xs text-gray-300">{importResult.message}</p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-left pt-2">
+                  <div className="p-3 rounded-2xl bg-[#202c33] border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Yeni Eklenen</span>
+                    <span className="text-lg font-bold text-emerald-400">{importResult.addedCount || 0}</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-[#202c33] border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Güncellenen</span>
+                    <span className="text-lg font-bold text-teal-400">{importResult.updatedCount || 0}</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-[#202c33] border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Mükerrer</span>
+                    <span className="text-lg font-bold text-amber-400">{importResult.duplicateInFileCount || 0}</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-[#202c33] border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Hatalı Numara</span>
+                    <span className="text-lg font-bold text-rose-400">{importResult.skippedInvalidCount || 0}</span>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    onClick={() => setShowImportWizard(false)}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg"
+                  >
+                    Tamamla ve Listeyi Görüntüle
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   LayoutDashboard, 
-  MessageSquare, 
   Users, 
   Send, 
   FileText, 
@@ -20,8 +19,7 @@ export function BottomNav() {
 
   const baseItems = [
     { href: '/', label: 'Pano', icon: LayoutDashboard },
-    { href: '/inbox', label: 'Sohbet', icon: MessageSquare },
-    { href: '/contacts', label: 'Rehber', icon: Users },
+    { href: '/contacts', label: 'Rehber CRM', icon: Users },
     { href: '/campaigns', label: 'Gönderim', icon: Send },
     { href: '/templates', label: 'Şablon', icon: FileText },
   ];

@@ -6,16 +6,13 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   LayoutDashboard, 
-  MessageSquare, 
   Users, 
   Send, 
   FileText, 
   ShieldAlert, 
   Settings,
   UserCog,
-  Zap,
-  ShieldCheck,
-  User
+  Zap
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -24,16 +21,15 @@ export function Sidebar() {
 
   const baseLinks = [
     { href: '/', label: 'Genel Bakış & Pano', icon: LayoutDashboard },
-    { href: '/inbox', label: 'Canlı Sohbet / Team Inbox', icon: MessageSquare, badge: 'Canlı' },
-    { href: '/contacts', label: 'Kişiler & Gruplar', icon: Users },
+    { href: '/contacts', label: 'Kişi & Grup Yönetimi', icon: Users, badge: 'CRM' },
     { href: '/campaigns', label: 'Toplu Gönderim & Kuyruk', icon: Send },
     { href: '/templates', label: 'Mesaj Şablonları', icon: FileText },
     { href: '/blacklist', label: 'Kara Liste / Opt-Out', icon: ShieldAlert },
+    { href: '/settings', label: 'Evolution API Ayarları', icon: Settings },
   ];
 
   const adminLinks = [
     { href: '/admin/users', label: 'Kullanıcı Yönetimi', icon: UserCog, badge: 'Admin' },
-    { href: '/settings', label: 'Evolution API & Ayarlar', icon: Settings },
   ];
 
   const links = isAdmin ? [...baseLinks, ...adminLinks] : baseLinks;
@@ -113,10 +109,10 @@ export function Sidebar() {
         <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-950/40 to-teal-950/20 border border-emerald-500/20 space-y-1.5">
           <div className="flex items-center gap-2 text-emerald-400">
             <Zap className="w-4 h-4 fill-emerald-400" />
-            <span className="text-xs font-bold">Anti-Ban Koruması</span>
+            <span className="text-xs font-bold">Toplu Mesaj Koruması</span>
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">
-            BullMQ kuyruğu ve rastgele insansı gecikme motoru devrede.
+            BullMQ kuyruğu, rastgele insansı gecikme ve parti molası devrede.
           </p>
         </div>
       </div>

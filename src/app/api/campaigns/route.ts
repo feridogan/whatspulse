@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       batchPause = 60,
     } = body;
 
-    if (!title) {
+    if (!title || !title.trim()) {
       return NextResponse.json({ error: 'Kampanya başlığı zorunludur.' }, { status: 400 });
     }
 
@@ -77,9 +77,7 @@ export async function POST(req: NextRequest) {
         },
       });
       targetContacts = [...targetContacts, ...groupContacts];
-    }
-
-    if (Array.isArray(contactIds) && contactIds.length > 0) {
+    } else if (Array.isArray(contactIds) && contactIds.length > 0) {
       const individualContacts = await prisma.contact.findMany({
         where: {
           id: { in: contactIds },
@@ -87,6 +85,11 @@ export async function POST(req: NextRequest) {
         },
       });
       targetContacts = [...targetContacts, ...individualContacts];
+    } else {
+      // Default: All active contacts
+      targetContacts = await prisma.contact.findMany({
+        where: { isBlacklisted: false },
+      });
     }
 
     // Deduplicate by phone
@@ -100,7 +103,9 @@ export async function POST(req: NextRequest) {
     const finalContacts = Array.from(uniqueMap.values());
 
     if (finalContacts.length === 0) {
-      return NextResponse.json({ error: 'Kampanya için geçerli hedef kişi bulunamadı (Tüm kişiler kara listede veya grup boş).' }, { status: 400 });
+      return NextResponse.json({
+        error: 'Kampanya için geçerli hedef kişi bulunamadı (Tüm kişiler kara listede veya seçilen grup boş).',
+      }, { status: 400 });
     }
 
     // 2. Create Campaign Record

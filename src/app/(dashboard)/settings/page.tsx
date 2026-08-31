@@ -9,13 +9,13 @@ import {
   Wifi, 
   RefreshCw, 
   ShieldCheck, 
-  Link as LinkIcon, 
   CheckCircle, 
   AlertCircle,
   ExternalLink,
   LogOut,
   Eye,
-  EyeOff
+  EyeOff,
+  QrCode
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -27,7 +27,6 @@ export default function SettingsPage() {
     instanceName: 'ff',
     instanceKey: '42A33C177D1A-4165-8F1D-0C6491AA85DD7DE66D9',
     globalApiKey: '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a',
-    webhookUrl: 'https://mesaj.cakirlar.net/api/webhook/evolution',
   });
 
   const [showInstanceKey, setShowInstanceKey] = useState(false);
@@ -45,8 +44,11 @@ export default function SettingsPage() {
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [connectionState, setConnectionState] = useState<string>('Bilinmiyor');
   const [testingConnection, setTestingConnection] = useState(false);
-  const [registeringWebhook, setRegisteringWebhook] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // QR Code State
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [loadingQr, setLoadingQr] = useState(false);
 
   // Redirect non-admins to dashboard
   useEffect(() => {
@@ -101,12 +103,37 @@ export default function SettingsPage() {
       
       const normalizedState = isOpen ? 'open' : isConnecting ? 'connecting' : (rawState || 'close');
       setConnectionState(normalizedState);
+
+      if (isConnecting || normalizedState === 'connecting') {
+        fetchQrCode(targetInst);
+      } else {
+        setQrCodeData(null);
+      }
+
       return normalizedState;
     } catch (err) {
       setConnectionState('close');
       return 'close';
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const fetchQrCode = async (inst?: string) => {
+    const targetInst = (inst || evoForm.instanceName || '').trim();
+    if (!targetInst) return;
+
+    try {
+      setLoadingQr(true);
+      const res = await fetch(`/api/evolution/qr?instance=${encodeURIComponent(targetInst)}`);
+      const data = await res.json();
+      if (data.qrcode || data.base64 || data.pairingCode) {
+        setQrCodeData(data.qrcode || data.base64 || data.pairingCode);
+      }
+    } catch (err) {
+      console.error('QR alma hatası:', err);
+    } finally {
+      setLoadingQr(false);
     }
   };
 
@@ -142,30 +169,6 @@ export default function SettingsPage() {
       setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
     } finally {
       setLoggingOut(false);
-    }
-  };
-
-  const handleRegisterWebhook = async () => {
-    try {
-      setRegisteringWebhook(true);
-      setStatusMsg(null);
-      const res = await fetch('/api/evolution/webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: evoForm.webhookUrl,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setStatusMsg({ type: 'success', text: 'Webhook başarıyla Evolution API sunucusuna tanımlandı!' });
-      } else {
-        setStatusMsg({ type: 'error', text: data.error || 'Webhook tanımlanamadı.' });
-      }
-    } catch (err: any) {
-      setStatusMsg({ type: 'error', text: err.message });
-    } finally {
-      setRegisteringWebhook(false);
     }
   };
 
@@ -214,14 +217,8 @@ export default function SettingsPage() {
         }),
       });
 
-      const st = await checkEvolutionStatus(evoForm.instanceName);
-      if (st === 'open') {
-        // Auto-sync contacts and groups in background
-        fetch('/api/evolution/sync', { method: 'POST' }).catch(() => {});
-        setStatusMsg({ type: 'success', text: 'Tüm ayarlar kaydedildi ve WhatsApp verileri otomatik senkronize edildi!' });
-      } else {
-        setStatusMsg({ type: 'success', text: 'Tüm ayarlar başarıyla kaydedildi!' });
-      }
+      await checkEvolutionStatus(evoForm.instanceName);
+      setStatusMsg({ type: 'success', text: 'Tüm ayarlar başarıyla kaydedildi!' });
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: 'Hata: ' + err.message });
     } finally {
@@ -246,254 +243,273 @@ export default function SettingsPage() {
               Sistem Yapılandırması
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Evolution API & Sistem Ayarları</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Evolution API & Bağlantı Ayarları</h1>
           <p className="text-xs text-gray-400">
-            Harici WhatsApp Evolution API sunucusu bağlantısı, Webhook ve Anti-Ban parametrelerini yapılandırın.
+            Evolution API v2 bağlantısı, oturum yönetimi ve Anti-Ban gönderim parametreleri.
           </p>
         </div>
 
-        <button
-          onClick={handleSaveAll}
-          disabled={saving}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all self-start sm:self-auto"
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}</span>
-        </button>
-      </div>
-
-      {statusMsg && (
-        <div className={`p-4 rounded-2xl text-xs font-medium border animate-fade-in ${
-          statusMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
-        }`}>
-          {statusMsg.text}
-        </div>
-      )}
-
-      {/* Evolution API Card */}
-      <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <Wifi className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-sm font-bold text-white">Harici Evolution API Bağlantısı</h2>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
-              isConnected
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                : isConnecting
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-            }`}>
-              Durum: {isConnected ? 'Bağlı / Open' : isConnecting ? 'Bağlanıyor...' : `Bağlantı Yok / ${connectionState}`}
-            </span>
-
-            <button
-              onClick={() => checkEvolutionStatus()}
-              disabled={testingConnection}
-              className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors"
-              title="Bağlantı Durumunu Yenile"
-            >
-              <RefreshCw className={`w-4 h-4 ${testingConnection ? 'animate-spin text-emerald-400' : ''}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* Info Banner */}
-        <div className="p-3.5 rounded-2xl bg-[#202c33]/60 border border-gray-700/60 text-xs text-gray-300 flex items-start gap-3">
-          <LinkIcon className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-          <div className="space-y-1">
-            <p className="font-semibold text-white">Manuel Instance & API Yönetimi</p>
-            <p className="text-gray-400 text-[11px] leading-relaxed">
-              Instance&apos;lar doğrudan harici Evolution API panelinden (<code className="text-emerald-300">{evoForm.apiUrl}</code>) manuel olarak açılır ve QR kod ile bağlanır. WhatsPulse, tanımlanan instance adı ve API Key ile güvenli mesajlaşma ve webhook trafiğini yürütür.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Evolution API Sunucu URL *</label>
-            <input
-              type="text"
-              value={evoForm.apiUrl}
-              onChange={(e) => setEvoForm({ ...evoForm, apiUrl: e.target.value })}
-              placeholder="https://evo-rc.cakirlar.net"
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Instance Adı *</label>
-            <input
-              type="text"
-              value={evoForm.instanceName}
-              onChange={(e) => setEvoForm({ ...evoForm, instanceName: e.target.value })}
-              placeholder="feridun"
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
-          </div>
-
-          {/* Instance API Key with Toggle */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Instance API Key</label>
-            <div className="relative">
-              <input
-                type={showInstanceKey ? 'text' : 'password'}
-                value={evoForm.instanceKey}
-                onChange={(e) => setEvoForm({ ...evoForm, instanceKey: e.target.value })}
-                placeholder="11E1F8329577-40D3-B891-9CCA41C01658"
-                className="w-full bg-[#202c33] border border-gray-700 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowInstanceKey(!showInstanceKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                title={showInstanceKey ? 'Gizle' : 'Göster'}
-              >
-                {showInstanceKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Global API Key with Toggle */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Global API Key *</label>
-            <div className="relative">
-              <input
-                type={showGlobalKey ? 'text' : 'password'}
-                value={evoForm.globalApiKey}
-                onChange={(e) => setEvoForm({ ...evoForm, globalApiKey: e.target.value })}
-                placeholder="4a8f9c2d1e0b3a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f"
-                className="w-full bg-[#202c33] border border-gray-700 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowGlobalKey(!showGlobalKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                title={showGlobalKey ? 'Gizle' : 'Göster'}
-              >
-                {showGlobalKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Webhook Section */}
-        <div className="pt-4 border-t border-gray-800/80 space-y-3">
-          <label className="block text-xs font-semibold text-gray-400">Webhook Geri Bildirim URL</label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="url"
-              value={evoForm.webhookUrl}
-              onChange={(e) => setEvoForm({ ...evoForm, webhookUrl: e.target.value })}
-              placeholder="https://mesaj.cakirlar.net/api/webhook/evolution"
-              className="flex-1 bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
-            <button
-              type="button"
-              onClick={handleRegisterWebhook}
-              disabled={registeringWebhook}
-              className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md whitespace-nowrap"
-            >
-              {registeringWebhook ? 'Kaydediliyor...' : 'Webhook’u Otomatik Tanımla'}
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-500">
-            Evolution API bu adrese anlık olarak gelen mesajları ve iletildi/okundu bildirimlerini gönderir.
-          </p>
-        </div>
-
-        {/* Disconnect Action */}
-        <div className="pt-2 flex justify-end">
+        <div className="flex items-center gap-3">
           <button
-            type="button"
-            onClick={handleLogoutInstance}
-            disabled={loggingOut || !isConnected}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => checkEvolutionStatus()}
+            disabled={testingConnection}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-gray-300 text-xs font-semibold border border-gray-700 transition-all"
           >
-            <LogOut className="w-4 h-4 text-rose-400" />
-            <span>{loggingOut ? 'Oturum Kapatılıyor...' : 'Oturumu Kapat / Bağlantıyı Kes (Logout)'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${testingConnection ? 'animate-spin' : ''}`} />
+            <span>Bağlantıyı Kontrol Et</span>
           </button>
         </div>
       </div>
 
-      {/* Anti-Ban & Rate Limit Card */}
-      <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 space-y-4">
-        <div className="flex items-center gap-2 pb-3 border-b border-gray-800">
-          <ShieldCheck className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-sm font-bold text-white">Anti-Ban & Kuyruk Motoru Parametreleri</h2>
+      {statusMsg && (
+        <div className={`p-4 rounded-2xl text-xs font-semibold flex items-center gap-2 animate-fade-in ${
+          statusMsg.type === 'success'
+            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+        }`}>
+          {statusMsg.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span>{statusMsg.text}</span>
+        </div>
+      )}
+
+      {/* WhatsApp Connection Card */}
+      <div className="p-5 sm:p-6 rounded-3xl bg-[#111b21] border border-gray-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-3 rounded-2xl border ${
+              isConnected ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+              isConnecting ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+              'bg-rose-500/10 text-rose-400 border-rose-500/30'
+            }`}>
+              <Wifi className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-2">
+                <span>WhatsApp Bağlantı Durumu:</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase ${
+                  isConnected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  isConnecting ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse' :
+                  'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                }`}>
+                  {isConnected ? 'BAĞLI & AKTİF' : isConnecting ? 'QR KOD BEKLENİYOR' : 'BAĞLANTI YOK'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aktif Instance: <span className="font-mono text-emerald-400">{evoForm.instanceName}</span> ({evoForm.apiUrl})
+              </p>
+            </div>
+          </div>
+
+          {isConnected && (
+            <button
+              type="button"
+              onClick={handleLogoutInstance}
+              disabled={loggingOut}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{loggingOut ? 'Kapatılıyor...' : 'Oturumu Kapat'}</span>
+            </button>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Min Gecikme (sn)</label>
-            <input
-              type="number"
-              min={3}
-              value={antibanForm.minDelay}
-              onChange={(e) => setAntibanForm({ ...antibanForm, minDelay: Number(e.target.value) })}
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white"
-            />
+        {/* QR Code Viewer (if connecting / scan_qr_code) */}
+        {isConnecting && qrCodeData && (
+          <div className="p-5 rounded-2xl bg-[#0b141a] border border-amber-500/40 text-center space-y-3">
+            <div className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1.5">
+              <QrCode className="w-4 h-4" />
+              WhatsApp Web &gt; Bağlı Cihazlar &gt; Cihaz Bağla
+            </div>
+            <div className="bg-white p-3 rounded-2xl inline-block shadow-xl">
+              <img src={qrCodeData} alt="WhatsApp QR Code" className="w-56 h-56 mx-auto" />
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Telefonunuzun WhatsApp uygulamasından QR kodu taratın.
+            </p>
           </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Maks Gecikme (sn)</label>
-            <input
-              type="number"
-              min={5}
-              value={antibanForm.maxDelay}
-              onChange={(e) => setAntibanForm({ ...antibanForm, maxDelay: Number(e.target.value) })}
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Parti Büyüklüğü (Mesaj)</label>
-            <input
-              type="number"
-              min={5}
-              value={antibanForm.batchSize}
-              onChange={(e) => setAntibanForm({ ...antibanForm, batchSize: Number(e.target.value) })}
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1">Parti Molası (sn)</label>
-            <input
-              type="number"
-              min={10}
-              value={antibanForm.batchPause}
-              onChange={(e) => setAntibanForm({ ...antibanForm, batchPause: Number(e.target.value) })}
-              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-1">Otomatik Kara Liste (Opt-Out) Anahtar Kelimeleri</label>
-          <input
-            type="text"
-            value={antibanForm.optOutKeywords}
-            onChange={(e) => setAntibanForm({ ...antibanForm, optOutKeywords: e.target.value })}
-            placeholder="IPTAL, STOP, CIK, RED, UNSUBSCRIBE"
-            className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono"
-          />
-          <p className="text-[11px] text-gray-500 mt-1">Virgülle ayırarak giriniz. Bu kelimeleri içeren gelen mesajlar otomatik engellenir.</p>
-        </div>
+        )}
       </div>
 
-      {/* Footer Info */}
-      <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-bold text-white">WhatsPulse Kurumsal Panel</h3>
-          <p className="text-xs text-gray-400">Harici Evolution API v2 Entegrasyonu & BullMQ Kuyruk Altyapısı</p>
+      {/* Main Settings Form */}
+      <form onSubmit={handleSaveAll} className="space-y-6">
+        {/* Evolution API Connection Settings */}
+        <div className="p-5 sm:p-6 rounded-3xl bg-[#111b21] border border-gray-800 shadow-xl space-y-4">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <Settings className="w-4 h-4 text-emerald-400" />
+            Evolution API v2 Sunucu Parametreleri
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Evolution API Sunucu URL *
+              </label>
+              <input
+                type="text"
+                required
+                value={evoForm.apiUrl}
+                onChange={(e) => setEvoForm({ ...evoForm, apiUrl: e.target.value })}
+                placeholder="http://10.0.201.201:3800"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Instance (Oturum) Adı *
+              </label>
+              <input
+                type="text"
+                required
+                value={evoForm.instanceName}
+                onChange={(e) => setEvoForm({ ...evoForm, instanceName: e.target.value })}
+                placeholder="ff"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Global API Key */}
+            <div className="relative">
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Global API Key
+              </label>
+              <input
+                type={showGlobalKey ? 'text' : 'password'}
+                value={evoForm.globalApiKey}
+                onChange={(e) => setEvoForm({ ...evoForm, globalApiKey: e.target.value })}
+                placeholder="Global API Key"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGlobalKey(!showGlobalKey)}
+                className="absolute right-3 top-8 text-gray-400 hover:text-white"
+              >
+                {showGlobalKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Instance Key */}
+            <div className="relative">
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Instance Key
+              </label>
+              <input
+                type={showInstanceKey ? 'text' : 'password'}
+                value={evoForm.instanceKey}
+                onChange={(e) => setEvoForm({ ...evoForm, instanceKey: e.target.value })}
+                placeholder="Instance API Key"
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowInstanceKey(!showInstanceKey)}
+                className="absolute right-3 top-8 text-gray-400 hover:text-white"
+              >
+                {showInstanceKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="text-xs text-gray-500">
-          WhatsPulse v1.0.0 • Production Build
+
+        {/* Anti-Ban & Queue Engine Settings */}
+        <div className="p-5 sm:p-6 rounded-3xl bg-[#111b21] border border-gray-800 shadow-xl space-y-4">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            Toplu Mesaj Anti-Ban & Güvenlik Parametreleri
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Min. Gecikme (sn)
+              </label>
+              <input
+                type="number"
+                min="2"
+                max="60"
+                value={antibanForm.minDelay}
+                onChange={(e) => setAntibanForm({ ...antibanForm, minDelay: Number(e.target.value) })}
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white"
+              />
+              <span className="text-[10px] text-gray-500">Önerilen: 5-8 sn</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Maks. Gecikme (sn)
+              </label>
+              <input
+                type="number"
+                min="5"
+                max="120"
+                value={antibanForm.maxDelay}
+                onChange={(e) => setAntibanForm({ ...antibanForm, maxDelay: Number(e.target.value) })}
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white"
+              />
+              <span className="text-[10px] text-gray-500">Önerilen: 15-20 sn</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Parti (Batch) Boyutu
+              </label>
+              <input
+                type="number"
+                min="5"
+                max="500"
+                value={antibanForm.batchSize}
+                onChange={(e) => setAntibanForm({ ...antibanForm, batchSize: Number(e.target.value) })}
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white"
+              />
+              <span className="text-[10px] text-gray-500">Kaç mesajda bir mola verilsin</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Parti Molası (sn)
+              </label>
+              <input
+                type="number"
+                min="10"
+                max="600"
+                value={antibanForm.batchPause}
+                onChange={(e) => setAntibanForm({ ...antibanForm, batchPause: Number(e.target.value) })}
+                className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white"
+              />
+              <span className="text-[10px] text-gray-500">Önerilen: 60 sn</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1">
+              Otomatik Opt-Out / Kara Liste Anahtar Kelimeleri
+            </label>
+            <input
+              type="text"
+              value={antibanForm.optOutKeywords}
+              onChange={(e) => setAntibanForm({ ...antibanForm, optOutKeywords: e.target.value })}
+              placeholder="IPTAL, STOP, CIK, RED, UNSUBSCRIBE"
+              className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white"
+            />
+            <span className="text-[10px] text-gray-500">
+              Gelen mesaj bu kelimelerden birini içerirse numara otomatik kara listeye alınır.
+            </span>
+          </div>
         </div>
-      </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'Kaydediliyor...' : 'Tüm Ayarları Kaydet'}</span>
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

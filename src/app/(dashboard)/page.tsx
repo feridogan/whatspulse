@@ -8,14 +8,17 @@ import {
   CheckCircle, 
   AlertTriangle, 
   RefreshCw, 
-  MessageSquare, 
   FileText, 
   UserPlus, 
   Sparkles,
   ArrowUpRight,
   TrendingUp,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Layers,
+  Upload,
+  FolderPlus,
+  Play
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -28,9 +31,8 @@ export default function DashboardPage() {
     deliveryRate: '100.0',
   });
   const [recentCampaigns, setRecentCampaigns] = useState<any[]>([]);
-  const [recentChats, setRecentChats] = useState<any[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Quick Send Modal State
   const [showQuickSend, setShowQuickSend] = useState(false);
@@ -41,6 +43,7 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
+      setLoading(true);
       // 1. Fetch Contacts count
       const contactsRes = await fetch('/api/contacts?limit=1');
       const contactsData = await contactsRes.json();
@@ -57,10 +60,6 @@ export default function DashboardPage() {
       const messagesRes = await fetch('/api/messages?limit=1');
       const messagesData = await messagesRes.json();
 
-      // 5. Fetch Chats
-      const chatsRes = await fetch('/api/inbox/chats');
-      const chatsData = await chatsRes.json();
-
       setStats({
         contactsCount: contactsData.total || 0,
         groupsCount: Array.isArray(groupsData) ? groupsData.length : 0,
@@ -71,33 +70,16 @@ export default function DashboardPage() {
       });
 
       if (Array.isArray(campaignsData)) {
-        setRecentCampaigns(campaignsData.slice(0, 3));
+        setRecentCampaigns(campaignsData.slice(0, 4));
       }
 
-      if (Array.isArray(chatsData)) {
-        setRecentChats(chatsData.slice(0, 4));
+      if (Array.isArray(groupsData)) {
+        setGroups(groupsData.slice(0, 5));
       }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
-    }
-  };
-
-  const handleSyncEvolution = async () => {
-    try {
-      setSyncing(true);
-      setSyncMessage(null);
-      const res = await fetch('/api/evolution/sync', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setSyncMessage(`✅ ${data.message || 'Senkronizasyon başarıyla tamamlandı!'}`);
-        loadData();
-      } else {
-        setSyncMessage(`❌ Hata: ${data.error}`);
-      }
-    } catch (err: any) {
-      setSyncMessage(`❌ Bağlantı hatası: ${err.message}`);
     } finally {
-      setSyncing(false);
+      setLoading(false);
     }
   };
 
@@ -118,7 +100,7 @@ export default function DashboardPage() {
 
       const data = await res.json();
       if (res.ok) {
-        setQuickResult('✅ Mesaj başarıyla gönderildi!');
+        setQuickResult('✅ Mesaj başarıyla iletildi!');
         setQuickPhone('');
         setQuickMessage('');
         loadData();
@@ -146,46 +128,39 @@ export default function DashboardPage() {
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
               Sistem Aktif
             </span>
-            <span className="text-xs text-gray-400">Evolution API v2</span>
+            <span className="text-xs text-gray-400">Profesyonel Toplu WhatsApp Platformu</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">WhatsPulse Yönetim Paneli</h1>
+          <h1 className="text-2xl font-bold text-white mt-1">WhatsPulse CRM & Gönderim Paneli</h1>
           <p className="text-xs sm:text-sm text-gray-400">
-            Kişi rehberinizi yönetin, şablonlarla kişiselleştirilmiş toplu mesajlar iletin.
+            Kişilerinizi yönetin, Excel/CSV ile aktarın, dinamik şablonlarla güvenli toplu mesajlar iletin.
           </p>
         </div>
 
         {/* Quick Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleSyncEvolution}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-white text-xs font-semibold border border-gray-700 transition-all shadow-md"
+            onClick={() => setShowQuickSend(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-white text-xs font-semibold border border-gray-700 transition-all shadow-md"
           >
-            <RefreshCw className={`w-4 h-4 text-emerald-400 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Eşitleniyor...' : 'WhatsApp Senkronize Et'}</span>
+            <Send className="w-4 h-4 text-emerald-400" />
+            <span>Hızlı Mesaj</span>
           </button>
 
-          <button
-            onClick={() => setShowQuickSend(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-all"
+          <Link
+            href="/campaigns"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
           >
-            <Send className="w-4 h-4" />
-            <span>Hızlı Mesaj Gönder</span>
-          </button>
+            <Play className="w-4 h-4 fill-white" />
+            <span>Yeni Kampanya Başlat</span>
+          </Link>
         </div>
       </div>
-
-      {syncMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium animate-fade-in">
-          {syncMessage}
-        </div>
-      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Toplam Kişi</span>
+            <span className="text-xs font-medium text-gray-400">Toplam CRM Kişisi</span>
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
               <Users className="w-4 h-4" />
             </div>
@@ -211,7 +186,7 @@ export default function DashboardPage() {
 
         <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Teslimat Oranı</span>
+            <span className="text-xs font-medium text-gray-400">Teslimat Başarısı</span>
             <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
               <CheckCircle className="w-4 h-4" />
             </div>
@@ -224,7 +199,7 @@ export default function DashboardPage() {
 
         <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Anti-Ban Durumu</span>
+            <span className="text-xs font-medium text-gray-400">Anti-Ban Koruması</span>
             <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
               <ShieldCheck className="w-4 h-4" />
             </div>
@@ -245,7 +220,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Send className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-base font-bold text-white">Son Kampanyalar ve Kuyruk</h2>
+                <h2 className="text-base font-bold text-white">Son Kampanyalar ve Kuyruk Durumu</h2>
               </div>
               <Link href="/campaigns" className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-medium">
                 Tümünü Gör <ArrowUpRight className="w-3.5 h-3.5" />
@@ -273,7 +248,7 @@ export default function DashboardPage() {
                         <div>
                           <span className="text-sm font-semibold text-white">{camp.title}</span>
                           <div className="text-[11px] text-gray-400">
-                            {camp.sentCount} / {camp.totalCount} Mesaj İletildi
+                            {camp.sentCount} / {camp.totalCount} Mesaj İletildi ({camp.failedCount} Başarısız)
                           </div>
                         </div>
                         <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
@@ -307,11 +282,11 @@ export default function DashboardPage() {
               className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-emerald-500/40 transition-all group"
             >
               <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 w-fit mb-3 group-hover:scale-105 transition-transform">
-                <Smartphone className="w-5 h-5" />
+                <Upload className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1">Cihaz Rehberini İçe Aktar</h3>
+              <h3 className="text-sm font-bold text-white mb-1">Excel & vCard ile İçe Aktar</h3>
               <p className="text-xs text-gray-400 leading-relaxed">
-                Telefonunuzdan tek tıkla kişi seçin veya .vcf / Excel dosyasından toplu yükleyin.
+                Müşteri tablonuzu sütun eşleme sihirbazıyla CRM&apos;e yükleyin ve gruplayın.
               </p>
             </Link>
 
@@ -322,59 +297,56 @@ export default function DashboardPage() {
               <div className="p-3 rounded-2xl bg-teal-500/10 text-teal-400 w-fit mb-3 group-hover:scale-105 transition-transform">
                 <FileText className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1">Dinamik Şablon Oluştur</h3>
+              <h3 className="text-sm font-bold text-white mb-1">Dinamik Şablonlar</h3>
               <p className="text-xs text-gray-400 leading-relaxed">
-                &#123;isim&#125;, &#123;tarih&#125; gibi akıllı etiketler ve görsellerle kişiye özel mesaj hazırlayın.
+                &#123;ad&#125;, &#123;soyad&#125;, &#123;firma&#125; gibi akıllı etiketler ve görsellerle kişiselleştirin.
               </p>
             </Link>
           </div>
         </div>
 
-        {/* Right 1 Col: Recent Chats / Team Inbox Preview */}
+        {/* Right 1 Col: CRM Quick Groups & Overview */}
         <div className="space-y-6">
           <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-base font-bold text-white">Canlı Sohbetler</h2>
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-base font-bold text-white">Aktif CRM Grupları</h2>
               </div>
-              <Link href="/inbox" className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-medium">
-                Gelen Kutusu <ArrowUpRight className="w-3.5 h-3.5" />
+              <Link href="/contacts" className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-medium">
+                Yönet <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            {recentChats.length === 0 ? (
+            {groups.length === 0 ? (
               <div className="text-center py-8 bg-[#202c33]/30 rounded-2xl border border-gray-800">
-                <MessageSquare className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                <p className="text-xs text-gray-400">Henüz sohbet kaydı bulunmuyor.</p>
+                <Layers className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                <p className="text-xs text-gray-400">Henüz grup oluşturulmadı.</p>
+                <Link
+                  href="/contacts"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
+                >
+                  İlk Grubu Oluştur
+                </Link>
               </div>
             ) : (
-              <div className="space-y-2">
-                {recentChats.map((chat) => (
+              <div className="space-y-2.5">
+                {groups.map((g) => (
                   <Link
-                    key={chat.id}
-                    href={`/inbox?phone=${encodeURIComponent(chat.phone)}`}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-[#202c33]/30 hover:bg-[#202c33]/70 border border-gray-800/60 transition-all"
+                    key={g.id}
+                    href={`/contacts?groupId=${g.id}`}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-[#202c33]/30 hover:bg-[#202c33]/70 border border-gray-800/60 transition-all group"
                   >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-9 h-9 rounded-full bg-emerald-700 flex items-center justify-center text-white font-bold text-xs shrink-0">
-                        {(chat.contactName || chat.phone).charAt(0).toUpperCase()}
-                      </div>
-                      <div className="overflow-hidden">
-                        <div className="text-xs font-semibold text-white truncate">
-                          {chat.contactName || `+${chat.phone}`}
-                        </div>
-                        <div className="text-[11px] text-gray-400 truncate">
-                          {chat.lastMessage || 'Medya mesajı'}
-                        </div>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color || '#10b981' }} />
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-white truncate">{g.name}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{g.description || 'Grup'}</div>
                       </div>
                     </div>
-
-                    {chat.unreadCount > 0 && (
-                      <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                        {chat.unreadCount}
-                      </span>
-                    )}
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold shrink-0">
+                      {g._count?.contacts || 0} Kişi
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -411,14 +383,14 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Telefon Numarası (Örn: 905321234567)
+                  Telefon Numarası (Örn: 0535 123 45 67 veya 905...)
                 </label>
                 <input
                   type="text"
                   required
                   value={quickPhone}
                   onChange={(e) => setQuickPhone(e.target.value)}
-                  placeholder="905xxxxxxxxx"
+                  placeholder="05xxxxxxxxx"
                   className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
                 />
               </div>

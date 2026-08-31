@@ -30,11 +30,6 @@ enum MessageStatus {
   FAILED
 }
 
-enum ChatSender {
-  INCOMING
-  OUTGOING
-}
-
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -137,37 +132,6 @@ model Message {
   @@index([phone])
   @@index([status])
   @@index([campaignId])
-}
-
-model Chat {
-  id              String        @id @default(cuid())
-  phone           String        @unique // Remote JID or E.164 number
-  contactName     String?
-  lastMessage     String?
-  lastMessageTime DateTime?     @default(now())
-  unreadCount     Int           @default(0)
-  isGroup         Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  messages        ChatMessage[]
-
-  @@index([phone])
-}
-
-model ChatMessage {
-  id                 String        @id @default(cuid())
-  chatId             String
-  chat               Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender             ChatSender    @default(OUTGOING)
-  content            String
-  mediaUrl           String?
-  mediaType          String? // text, image, document, audio, video
-  status             MessageStatus @default(SENT)
-  evolutionMessageId String?
-  timestamp          DateTime      @default(now())
-  createdAt          DateTime      @default(now())
-
-  @@index([chatId])
 }
 
 model Blacklist {

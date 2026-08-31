@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { normalizePhone } from '@/lib/utils';
+import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -33,10 +33,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const { name, phone: rawPhone, email, notes, isBlacklisted, groupIds, customFields } = body;
 
     const data: any = {};
-    if (name !== undefined) data.name = name;
-    if (rawPhone !== undefined) data.phone = normalizePhone(rawPhone);
-    if (email !== undefined) data.email = email;
-    if (notes !== undefined) data.notes = notes;
+    if (name !== undefined) data.name = name.trim();
+    if (rawPhone !== undefined) data.phone = formatPhoneNumber(rawPhone);
+    if (email !== undefined) data.email = email ? email.trim() : null;
+    if (notes !== undefined) data.notes = notes ? notes.trim() : null;
     if (isBlacklisted !== undefined) data.isBlacklisted = Boolean(isBlacklisted);
     if (customFields !== undefined) data.customFields = customFields;
 
@@ -82,6 +82,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     return NextResponse.json(updated);
   } catch (error: any) {
+    if (error.code === 'P2002') {
+      return NextResponse.json({ error: 'Bu telefon numarası başka bir kişide kayıtlı.' }, { status: 400 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

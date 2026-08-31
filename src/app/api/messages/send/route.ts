@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EvolutionService } from '@/lib/evolution';
-import { normalizePhone } from '@/lib/utils';
+import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,11 +11,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Telefon numarası ve mesaj içeriği zorunludur.' }, { status: 400 });
     }
 
-    const phone = normalizePhone(rawPhone);
+    const cleanDigits = normalizePhone(rawPhone);
+    const phone = formatPhoneNumber(rawPhone);
 
     // Check Blacklist
-    const blacklisted = await prisma.blacklist.findUnique({
-      where: { phone },
+    const blacklisted = await prisma.blacklist.findFirst({
+      where: {
+        OR: [{ phone }, { phone: cleanDigits }],
+      },
     });
 
     if (blacklisted) {
@@ -24,22 +27,24 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // Find or create Contact
-    let contact = await prisma.contact.findUnique({
-      where: { phone },
+    // Find contact
+    const contact = await prisma.contact.findFirst({
+      where: {
+        OR: [{ phone }, { phone: cleanDigits }],
+      },
     });
 
     // Send via Evolution API
     let result: any;
     if (mediaUrl) {
       result = await EvolutionService.sendMedia(
-        phone,
+        cleanDigits,
         mediaUrl,
         mediaType as any,
         content || ''
       );
     } else {
-      result = await EvolutionService.sendText(phone, content);
+      result = await EvolutionService.sendText(cleanDigits, content);
     }
 
     const evoMsgId = result?.key?.id || result?.messageId || result?.id || null;
@@ -55,44 +60,6 @@ export async function POST(req: NextRequest) {
         status: 'SENT',
         evolutionMessageId: evoMsgId,
         sentAt: new Date(),
-      },
-    });
-
-    // Save/Update in Chat & ChatMessage table for Team Inbox
-    let chat = await prisma.chat.findUnique({
-      where: { phone },
-    });
-
-    if (!chat) {
-      chat = await prisma.chat.create({
-        data: {
-          phone,
-          contactName: contact?.name || `+${phone}`,
-          lastMessage: content || '[Medya]',
-          lastMessageTime: new Date(),
-          unreadCount: 0,
-        },
-      });
-    } else {
-      await prisma.chat.update({
-        where: { id: chat.id },
-        data: {
-          lastMessage: content || '[Medya]',
-          lastMessageTime: new Date(),
-        },
-      });
-    }
-
-    await prisma.chatMessage.create({
-      data: {
-        chatId: chat.id,
-        sender: 'OUTGOING',
-        content: content || '',
-        mediaUrl: mediaUrl || null,
-        mediaType,
-        status: 'SENT',
-        evolutionMessageId: evoMsgId,
-        timestamp: new Date(),
       },
     });
 
