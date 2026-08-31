@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const adminKey = req.headers.get('x-admin-key');
     if (adminKey !== '16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a') {
@@ -20,32 +20,23 @@ export async function POST(req: NextRequest) {
       timeout: 20000,
     });
 
-    // Step 1: Delete stale instance session
+    let createRes = null;
     try {
-      await client.delete(`/instance/delete/${config.instance}`);
+      const res = await client.post('/instance/create', {
+        instanceName: config.instance,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+      });
+      createRes = { success: true, data: res.data };
     } catch (e: any) {
-      console.log('Delete instance notice:', e.message);
+      createRes = { success: false, error: e.message, data: e.response?.data };
     }
 
-    // Wait 1 second
-    await new Promise(r => setTimeout(r, 1000));
-
-    // Step 2: Create fresh instance with qrcode: true
-    const createRes = await client.post('/instance/create', {
-      instanceName: config.instance,
-      qrcode: true,
-      integration: 'WHATSAPP-BAILEYS',
-    });
-
-    const qrData = createRes.data?.qrcode?.base64 || createRes.data?.base64 || createRes.data?.qrcode || createRes.data?.code;
-
     return NextResponse.json({
-      success: true,
-      hasQr: Boolean(qrData),
-      qrcode: qrData,
-      data: createRes.data,
+      config,
+      createRes,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message, data: error.response?.data }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
