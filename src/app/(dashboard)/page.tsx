@@ -1,434 +1,405 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { 
   Users, 
+  UserCheck, 
   Send, 
-  CheckCircle, 
   AlertTriangle, 
+  TrendingUp, 
+  Wifi, 
+  WifiOff, 
+  ShieldCheck, 
+  Globe, 
+  Clock, 
+  CheckCircle2, 
+  Plus, 
+  ArrowRight, 
   RefreshCw, 
-  FileText, 
-  UserPlus, 
+  Receipt, 
+  MessageSquare,
   Sparkles,
-  ArrowUpRight,
-  TrendingUp,
-  ShieldCheck,
-  Smartphone,
-  Layers,
-  Upload,
-  FolderPlus,
-  Play
-} from 'lucide-react';
+  ExternalLink,
+  Layers
+} from "lucide-react";
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState({
-    contactsCount: 0,
-    groupsCount: 0,
-    campaignsCount: 0,
-    totalSent: 0,
+  const [stats, setStats] = useState<any>({
+    totalSubscribers: 0,
+    activeSubscribers: 0,
+    interactiveSubscribers: 0,
     totalDelivered: 0,
-    deliveryRate: '100.0',
+    totalFailed: 0,
+    successRate: 99.8,
+    whatsappConnected: false,
+    whatsappState: "KOPUK",
+    spamRisk: "DÜŞÜK (GÜVENLİ)",
+    totalDomains: 0,
+    expiringCount: 0,
   });
-  const [recentCampaigns, setRecentCampaigns] = useState<any[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [expiringDomains, setExpiringDomains] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Quick Send Modal State
-  const [showQuickSend, setShowQuickSend] = useState(false);
-  const [quickPhone, setQuickPhone] = useState('');
-  const [quickMessage, setQuickMessage] = useState('');
-  const [sendingQuick, setSendingQuick] = useState(false);
-  const [quickResult, setQuickResult] = useState<string | null>(null);
-
-  const loadData = async () => {
+  const fetchStats = async () => {
     try {
       setLoading(true);
-      // 1. Fetch Contacts count
-      const contactsRes = await fetch('/api/contacts?limit=1');
-      const contactsData = await contactsRes.json();
-
-      // 2. Fetch Groups
-      const groupsRes = await fetch('/api/groups');
-      const groupsData = await groupsRes.json();
-
-      // 3. Fetch Campaigns
-      const campaignsRes = await fetch('/api/campaigns');
-      const campaignsData = await campaignsRes.json();
-
-      // 4. Fetch Message Stats
-      const messagesRes = await fetch('/api/messages?limit=1');
-      const messagesData = await messagesRes.json();
-
-      setStats({
-        contactsCount: contactsData.total || 0,
-        groupsCount: Array.isArray(groupsData) ? groupsData.length : 0,
-        campaignsCount: Array.isArray(campaignsData) ? campaignsData.length : 0,
-        totalSent: messagesData.stats?.totalSent || 0,
-        totalDelivered: messagesData.stats?.totalDelivered || 0,
-        deliveryRate: messagesData.stats?.deliveryRate || '100.0',
-      });
-
-      if (Array.isArray(campaignsData)) {
-        setRecentCampaigns(campaignsData.slice(0, 4));
-      }
-
-      if (Array.isArray(groupsData)) {
-        setGroups(groupsData.slice(0, 5));
+      const res = await fetch("/api/dashboard/stats");
+      const data = await res.json();
+      if (data.success) {
+        if (data.stats) setStats(data.stats);
+        if (data.expiringDomains) setExpiringDomains(data.expiringDomains);
       }
     } catch (err) {
-      console.error('Error loading dashboard data:', err);
+      console.error("Dashboard stats error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendQuickMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSendingQuick(true);
-    setQuickResult(null);
-
-    try {
-      const res = await fetch('/api/messages/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: quickPhone,
-          content: quickMessage,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setQuickResult('✅ Mesaj başarıyla iletildi!');
-        setQuickPhone('');
-        setQuickMessage('');
-        loadData();
-        setTimeout(() => setShowQuickSend(false), 1500);
-      } else {
-        setQuickResult(`❌ Hata: ${data.error}`);
-      }
-    } catch (err: any) {
-      setQuickResult(`❌ Hata: ${err.message}`);
-    } finally {
-      setSendingQuick(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
+    fetchStats();
+    const interval = setInterval(fetchStats, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Welcome & Quick Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#111b21] to-[#14232c] border border-gray-800 rounded-3xl p-5 sm:p-6 shadow-xl">
-        <div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Top Banner: DTS Status & Quick Summary */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#121c24] via-[#0f1a20] to-[#0c1418] border border-amber-500/20 shadow-xl">
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-              Sistem Aktif
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-extrabold border border-amber-500/30 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              DTS Enterprise Panel
             </span>
-            <span className="text-xs text-gray-400">Profesyonel Toplu WhatsApp Platformu</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[11px] font-bold border border-emerald-500/30">
+              Canlı Takip Aktif
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">WhatsPulse CRM & Gönderim Paneli</h1>
-          <p className="text-xs sm:text-sm text-gray-400">
-            Kişilerinizi yönetin, Excel/CSV ile aktarın, dinamik şablonlarla güvenli toplu mesajlar iletin.
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            Domain Takip & İletişim Kontrol Merkezi
+          </h1>
+          <p className="text-xs text-gray-400 max-w-2xl">
+            Alan adı süre bitişlerini, WhatsApp bildirimlerini, müşteri etkileşimlerini ve sipariş tekliflerini tek merkezden yönetin.
           </p>
         </div>
 
-        {/* Quick Buttons */}
+        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setShowQuickSend(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-white text-xs font-semibold border border-gray-700 transition-all shadow-md"
-          >
-            <Send className="w-4 h-4 text-emerald-400" />
-            <span>Hızlı Mesaj</span>
-          </button>
-
           <Link
-            href="/campaigns"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
+            href="/domains"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
           >
-            <Play className="w-4 h-4 fill-white" />
-            <span>Yeni Kampanya Başlat</span>
+            <Plus className="w-4 h-4 text-black" />
+            <span>+ Yeni Alan Adı</span>
           </Link>
+          <Link
+            href="/subscribers"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-gray-200 border border-gray-700 text-xs font-bold transition-all cursor-pointer"
+          >
+            <Users className="w-4 h-4 text-amber-400" />
+            <span>+ Yeni Abone</span>
+          </Link>
+          <button
+            onClick={fetchStats}
+            title="İstatistikleri Yenile"
+            className="p-2.5 rounded-xl bg-[#16222b] hover:bg-[#202c33] text-gray-300 border border-gray-700 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-400" : ""}`} />
+          </button>
         </div>
       </div>
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+      {/* 7 Statistics Cards (Dark Gold / Emerald Theme) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Abone / Müşteri */}
+        <div className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-amber-500/30 transition-all shadow-lg group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Toplam CRM Kişisi</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <span className="text-xs font-bold text-gray-400">Toplam Abone / Müşteri</span>
+            <div className="w-9 h-9 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
               <Users className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-extrabold text-white">{stats.contactsCount}</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">{stats.groupsCount} Farklı Grup</div>
+            <div className="text-2xl font-black text-white tracking-tight font-mono">
+              {stats.totalSubscribers.toLocaleString("tr-TR")}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                {stats.activeSubscribers} Aktif Abone
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+        {/* Card 2: Etkileşimli Abone */}
+        <div className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-emerald-500/30 transition-all shadow-lg group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Toplam Gönderim</span>
-            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400">
+            <span className="text-xs font-bold text-gray-400">Etkileşimli Abone</span>
+            <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-black text-white tracking-tight font-mono">
+              {stats.interactiveSubscribers.toLocaleString("tr-TR")}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">WhatsApp onaylı / yanıt veren</p>
+          </div>
+        </div>
+
+        {/* Card 3: İletilen Bildirimler */}
+        <div className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-teal-500/30 transition-all shadow-lg group">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-400">İletilen Bildirimler</span>
+            <div className="w-9 h-9 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 group-hover:scale-110 transition-transform">
               <Send className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-extrabold text-white">{stats.totalSent}</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">{stats.campaignsCount} Kampanya</div>
+            <div className="text-2xl font-black text-white tracking-tight font-mono">
+              {stats.totalDelivered.toLocaleString("tr-TR")}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-400">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Teslim edilen mesaj & bildirim</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+        {/* Card 4: Başarısız Mesaj & Başarı Oranı */}
+        <div className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-rose-500/30 transition-all shadow-lg group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Teslimat Başarısı</span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <CheckCircle className="w-4 h-4" />
+            <span className="text-xs font-bold text-gray-400">Başarı Oranı</span>
+            <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-extrabold text-white">%{stats.deliveryRate}</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">{stats.totalDelivered} Başarılı İletim</div>
-          </div>
-        </div>
-
-        <div className="bg-[#111b21] border border-gray-800/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Anti-Ban Koruması</span>
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="text-2xl font-black text-white tracking-tight font-mono">
+              %{stats.successRate}
             </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-xl sm:text-2xl font-bold text-emerald-400">Aktif & Güvenli</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">8 - 20 sn İnsansı Gecikme</div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-400">
+              <span>Hata: <strong className="text-rose-400">{stats.totalFailed}</strong> mesaj</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main 2-Column Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Recent Campaigns & Fast Access */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Recent Campaigns Card */}
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Send className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-base font-bold text-white">Son Kampanyalar ve Kuyruk Durumu</h2>
-              </div>
-              <Link href="/campaigns" className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-medium">
-                Tümünü Gör <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
+      {/* Second Row: WhatsApp Line Status, Spam Risk & Domain Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* WhatsApp Line Status */}
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-[#111b21] to-[#0c161c] border border-emerald-500/20 shadow-lg flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-gray-400">WhatsApp Hattı Durumu</span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <div className={`w-2.5 h-2.5 rounded-full ${stats.whatsappConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-500"}`} />
+              <span className={`text-sm font-extrabold uppercase font-mono ${stats.whatsappConnected ? "text-emerald-400" : "text-rose-400"}`}>
+                {stats.whatsappState}
+              </span>
             </div>
+            <p className="text-[11px] text-gray-500 mt-1">Evolution API v2 soketi</p>
+          </div>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${
+            stats.whatsappConnected 
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+              : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+          }`}>
+            {stats.whatsappConnected ? <Wifi className="w-6 h-6" /> : <WifiOff className="w-6 h-6" />}
+          </div>
+        </div>
 
-            {recentCampaigns.length === 0 ? (
-              <div className="text-center py-8 bg-[#202c33]/30 rounded-2xl border border-gray-800">
-                <Send className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                <p className="text-xs text-gray-400">Henüz başlatılmış bir kampanya yok.</p>
-                <Link
-                  href="/campaigns"
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
-                >
-                  İlk Kampanyayı Başlat
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentCampaigns.map((camp) => {
-                  const progress = camp.totalCount > 0 ? Math.round(((camp.sentCount + camp.failedCount) / camp.totalCount) * 100) : 0;
+        {/* Spam & Line Risk */}
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-[#111b21] to-[#0c161c] border border-amber-500/20 shadow-lg flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-gray-400">Spam & Hat Riski</span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-sm font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-mono">
+                {stats.spamRisk}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">İnsansı gecikme (5-15 sn) devrede</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Domain Radar Metric */}
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-[#111b21] to-[#0c161c] border border-gray-800 shadow-lg flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-gray-400">Kayıtlı Alan Adları</span>
+            <div className="text-xl font-black text-white font-mono mt-1">
+              {stats.totalDomains} Domain
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-amber-400">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{stats.expiringCount} alan adı yenileme bekliyor</span>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-[#16222b] border border-gray-700 flex items-center justify-center text-amber-400">
+            <Globe className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Domain Expiry Radar & Quick Notifications Section */}
+      <div className="p-5 sm:p-6 rounded-3xl bg-[#111b21] border border-gray-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">Yaklaşan Alan Adı Yenilemeleri (Domain Radarı)</h2>
+              <p className="text-[11px] text-gray-400">Bitiş tarihi yaklaşan alan adları için tek tıkla WhatsApp hatırlatması gönderin.</p>
+            </div>
+          </div>
+
+          <Link
+            href="/domains"
+            className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+          >
+            <span>Tüm Alan Adları</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {expiringDomains.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 space-y-2">
+            <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-400/50" />
+            <p className="text-xs font-semibold text-gray-300">Önümüzdeki 30 gün içinde süresi dolacak kritik alan adı bulunmuyor.</p>
+            <p className="text-[11px] text-gray-500">Yeni alan adları tanımlamak için "Alan Adları & Hosting" menüsünü kullanabilirsiniz.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-gray-300">
+              <thead className="text-[11px] uppercase tracking-wider text-gray-500 border-b border-gray-800 font-mono">
+                <tr>
+                  <th className="py-2.5 px-3">Alan Adı</th>
+                  <th className="py-2.5 px-3">Müşteri / Abone</th>
+                  <th className="py-2.5 px-3">Kayıt Firması</th>
+                  <th className="py-2.5 px-3">Bitiş Tarihi</th>
+                  <th className="py-2.5 px-3">Kalan Süre</th>
+                  <th className="py-2.5 px-3 text-right">Hızlı İşlem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/60 font-sans">
+                {expiringDomains.map((dom) => {
+                  const expiry = new Date(dom.expiryDate);
+                  const diffDays = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const isUrgent = diffDays <= 7;
+                  const isWarning = diffDays <= 15;
+
                   return (
-                    <div key={camp.id} className="p-4 rounded-2xl bg-[#202c33]/40 border border-gray-800/80 hover:border-gray-700 transition-all">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <span className="text-sm font-semibold text-white">{camp.title}</span>
-                          <div className="text-[11px] text-gray-400">
-                            {camp.sentCount} / {camp.totalCount} Mesaj İletildi ({camp.failedCount} Başarısız)
+                    <tr key={dom.id} className="hover:bg-[#16222b]/50 transition-colors">
+                      <td className="py-3 px-3 font-mono font-bold text-white flex items-center gap-1.5">
+                        <span>{dom.name}</span>
+                        <a
+                          href={`https://${dom.name}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-gray-500 hover:text-amber-400"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </td>
+                      <td className="py-3 px-3">
+                        {dom.subscriber ? (
+                          <div>
+                            <div className="font-semibold text-white">{dom.subscriber.name}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">{dom.subscriber.phone}</div>
                           </div>
-                        </div>
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                          camp.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400' :
-                          camp.status === 'PROCESSING' ? 'bg-amber-500/20 text-amber-400 animate-pulse' :
-                          camp.status === 'PAUSED' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-gray-300'
+                        ) : (
+                          <span className="text-gray-500 italic">Abone Atanmamış</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-gray-400">
+                        {dom.registrar || "METUNIC"}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-gray-300">
+                        {expiry.toLocaleDateString("tr-TR")}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
+                          isUrgent
+                            ? "bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse"
+                            : isWarning
+                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                            : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
                         }`}>
-                          {camp.status === 'COMPLETED' ? 'Tamamlandı' :
-                           camp.status === 'PROCESSING' ? 'Gönderiliyor' :
-                           camp.status === 'PAUSED' ? 'Duraklatıldı' : camp.status}
+                          {diffDays <= 0 ? "SÜRESİ BİTTİ" : `${diffDays} Gün Kaldı`}
                         </span>
-                      </div>
-                      {/* Progress Bar */}
-                      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <Link
+                          href={`/chat?phone=${dom.subscriber?.phone || ""}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>WhatsApp Hatırlat</span>
+                        </Link>
+                      </td>
+                    </tr>
                   );
                 })}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
-
-          {/* Quick Feature Navigation Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Link
-              href="/contacts"
-              className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-emerald-500/40 transition-all group"
-            >
-              <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 w-fit mb-3 group-hover:scale-105 transition-transform">
-                <Upload className="w-5 h-5" />
-              </div>
-              <h3 className="text-sm font-bold text-white mb-1">Excel & vCard ile İçe Aktar</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Müşteri tablonuzu sütun eşleme sihirbazıyla CRM&apos;e yükleyin ve gruplayın.
-              </p>
-            </Link>
-
-            <Link
-              href="/templates"
-              className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-emerald-500/40 transition-all group"
-            >
-              <div className="p-3 rounded-2xl bg-teal-500/10 text-teal-400 w-fit mb-3 group-hover:scale-105 transition-transform">
-                <FileText className="w-5 h-5" />
-              </div>
-              <h3 className="text-sm font-bold text-white mb-1">Dinamik Şablonlar</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                &#123;ad&#125;, &#123;soyad&#125;, &#123;firma&#125; gibi akıllı etiketler ve görsellerle kişiselleştirin.
-              </p>
-            </Link>
-          </div>
-        </div>
-
-        {/* Right 1 Col: CRM Quick Groups & Overview */}
-        <div className="space-y-6">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-base font-bold text-white">Aktif CRM Grupları</h2>
-              </div>
-              <Link href="/contacts" className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-medium">
-                Yönet <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {groups.length === 0 ? (
-              <div className="text-center py-8 bg-[#202c33]/30 rounded-2xl border border-gray-800">
-                <Layers className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                <p className="text-xs text-gray-400">Henüz grup oluşturulmadı.</p>
-                <Link
-                  href="/contacts"
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
-                >
-                  İlk Grubu Oluştur
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {groups.map((g) => (
-                  <Link
-                    key={g.id}
-                    href={`/contacts?groupId=${g.id}`}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-[#202c33]/30 hover:bg-[#202c33]/70 border border-gray-800/60 transition-all group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color || '#10b981' }} />
-                      <div className="truncate">
-                        <div className="text-xs font-bold text-white truncate">{g.name}</div>
-                        <div className="text-[10px] text-gray-400 truncate">{g.description || 'Grup'}</div>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold shrink-0">
-                      {g._count?.contacts || 0} Kişi
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Fast Direct Message Modal */}
-      {showQuickSend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Send className="w-4 h-4 text-emerald-400" />
-                Hızlı WhatsApp Mesajı Gönder
-              </h3>
-              <button
-                onClick={() => setShowQuickSend(false)}
-                className="text-gray-400 hover:text-white text-sm"
-              >
-                ✕
-              </button>
+      {/* Quick Access Modules Navigation */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Link
+          href="/domains"
+          className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-amber-500/40 transition-all flex items-center justify-between group cursor-pointer shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+              <Globe className="w-5 h-5" />
             </div>
-
-            <form onSubmit={handleSendQuickMessage} className="space-y-4">
-              {quickResult && (
-                <div className={`p-3 rounded-xl text-xs font-medium ${
-                  quickResult.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                }`}>
-                  {quickResult}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Telefon Numarası (Örn: 0535 123 45 67 veya 905...)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={quickPhone}
-                  onChange={(e) => setQuickPhone(e.target.value)}
-                  placeholder="05xxxxxxxxx"
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Mesaj Metni
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  value={quickMessage}
-                  onChange={(e) => setQuickMessage(e.target.value)}
-                  placeholder="Mesajınızı buraya yazın..."
-                  className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 resize-none"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickSend(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  disabled={sendingQuick}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center justify-center gap-1.5"
-                >
-                  {sendingQuick ? 'Gönderiliyor...' : 'Gönder'}
-                </button>
-              </div>
-            </form>
+            <div>
+              <h3 className="text-xs font-bold text-white">Alan Adları & Hosting</h3>
+              <p className="text-[11px] text-gray-400">WHOIS sorgulama ve SSL takibi</p>
+            </div>
           </div>
-        </div>
-      )}
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-amber-400 transition-colors" />
+        </Link>
+
+        <Link
+          href="/groups"
+          className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-emerald-500/40 transition-all flex items-center justify-between group cursor-pointer shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-white">Çift Pencereli Gruplar</h3>
+              <p className="text-[11px] text-gray-400">Hızlı müşteri & abone ataması</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-emerald-400 transition-colors" />
+        </Link>
+
+        <Link
+          href="/orders"
+          className="p-5 rounded-3xl bg-[#111b21] border border-gray-800 hover:border-teal-500/40 transition-all flex items-center justify-between group cursor-pointer shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 group-hover:scale-110 transition-transform">
+              <Receipt className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-white">Sipariş & Teklifler</h3>
+              <p className="text-[11px] text-gray-400">Yenileme teklifi ve PDF çıktısı</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-teal-400 transition-colors" />
+        </Link>
+      </div>
     </div>
   );
 }

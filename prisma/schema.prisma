@@ -30,6 +30,20 @@ enum MessageStatus {
   FAILED
 }
 
+enum DomainStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  TRANSFERRED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PAID
+  CANCELLED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -41,6 +55,127 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+// -------------------------------------------------------------
+// DTS SUBSCRIBER & CRM MODELS
+// -------------------------------------------------------------
+model Subscriber {
+  id            String            @id @default(cuid())
+  name          String
+  phone         String            @unique
+  email         String?
+  company       String?
+  notes         String?
+  channels      Json?             @default("[\"WhatsApp\"]") // WhatsApp, SMS, E-Posta, Sesli Arama
+  preferredTime String?           @default("08:00")
+  language      String?           @default("TR")
+  isActive      Boolean           @default(true)
+  isInteractive Boolean           @default(false)
+  isBlacklisted Boolean           @default(false)
+  lastSentAt    DateTime?
+  customFields  Json?             @default("{}")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  groups        SubscriberGroup[]
+  domains       Domain[]
+  orders        Order[]
+  notifications NotificationLog[]
+
+  @@index([phone])
+}
+
+model SubscriberGroup {
+  id           String     @id @default(cuid())
+  subscriberId String
+  groupId      String
+  createdAt    DateTime   @default(now())
+
+  subscriber   Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, groupId])
+}
+
+// -------------------------------------------------------------
+// DTS DOMAIN & HOSTING MANAGEMENT
+// -------------------------------------------------------------
+model Domain {
+  id            String       @id @default(cuid())
+  name          String       @unique // e.g. "cakirlar.net"
+  subscriberId  String?
+  subscriber    Subscriber?  @relation(fields: [subscriberId], references: [id], onDelete: SetNull)
+  registrar     String?      @default("METUNIC") // METUNIC, IHS, Natro, GoDaddy vb.
+  expiryDate    DateTime
+  sslExpiryDate DateTime?
+  autoRenew     Boolean      @default(false)
+  status        DomainStatus @default(ACTIVE)
+  price         Float?       @default(250)
+  currency      String?      @default("TL")
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  orders        Order[]
+  notifications NotificationLog[]
+
+  @@index([name])
+  @@index([expiryDate])
+}
+
+// -------------------------------------------------------------
+// DTS ORDERS & OFFERS
+// -------------------------------------------------------------
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  String      @unique // e.g. "DTS-2026-001"
+  subscriberId String?
+  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id], onDelete: SetNull)
+  domainId     String?
+  domain       Domain?     @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  title        String
+  amount       Float
+  currency     String      @default("TL")
+  status       OrderStatus @default(PENDING)
+  items        Json?       @default("[]")
+  validUntil   DateTime?
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+// -------------------------------------------------------------
+// NOTIFICATION & DELIVERY LOGS
+// -------------------------------------------------------------
+model NotificationLog {
+  id           String      @id @default(cuid())
+  subscriberId String?
+  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id], onDelete: SetNull)
+  domainId     String?
+  domain       Domain?     @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  channel      String      @default("WhatsApp") // WhatsApp, SMS, E-Posta, Sesli
+  type         String      @default("DOMAIN_RENEWAL")
+  status       String      @default("SENT") // SENT, DELIVERED, FAILED
+  recipient    String
+  content      String
+  error        String?
+  sentAt       DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+
+  @@index([recipient])
+  @@index([status])
+}
+
+// -------------------------------------------------------------
+// SYSTEM CONFIGURATION & COMPATIBILITY
+// -------------------------------------------------------------
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Backward Compatibility with Contact & Campaign Models
 model Contact {
   id            String         @id @default(cuid())
   name          String
@@ -58,13 +193,14 @@ model Contact {
 }
 
 model Group {
-  id          String         @id @default(cuid())
-  name        String         @unique
+  id          String            @id @default(cuid())
+  name        String            @unique
   description String?
-  color       String?        @default("#10b981")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  color       String?           @default("#10b981")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   contacts    ContactGroup[]
+  subscribers SubscriberGroup[]
 }
 
 model ContactGroup {
@@ -83,7 +219,7 @@ model Template {
   id        String     @id @default(cuid())
   name      String
   content   String
-  mediaType String? // text, image, document, audio, video
+  mediaType String?
   mediaUrl  String?
   variables Json?      @default("[]")
   createdAt DateTime   @default(now())
@@ -100,10 +236,10 @@ model Campaign {
   totalCount  Int            @default(0)
   sentCount   Int            @default(0)
   failedCount Int            @default(0)
-  minDelay    Int            @default(8) // Minimum humanized delay (seconds)
-  maxDelay    Int            @default(20) // Maximum humanized delay (seconds)
-  batchSize   Int            @default(25) // Batch pause after N messages
-  batchPause  Int            @default(60) // Pause duration between batches (seconds)
+  minDelay    Int            @default(8)
+  maxDelay    Int            @default(20)
+  batchSize   Int            @default(25)
+  batchPause  Int            @default(60)
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime       @default(now())

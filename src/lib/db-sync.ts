@@ -5,11 +5,10 @@ let isSynced = false;
 export async function ensureDbSchemaSync() {
   if (isSynced) return;
   try {
-    // Ensure ContactGroup table matches Prisma schema: id (PK), unique(contactId, groupId), createdAt
     await prisma.$executeRawUnsafe(`
       DO $$
       BEGIN
-        -- Add id column if not exists
+        -- 1. Ensure ContactGroup structure
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns 
           WHERE table_name='ContactGroup' AND column_name='id'
@@ -21,7 +20,6 @@ export async function ensureDbSchemaSync() {
           ALTER TABLE "ContactGroup" ADD CONSTRAINT "ContactGroup_pkey" PRIMARY KEY ("id");
         END IF;
 
-        -- Ensure unique constraint or index on (contactId, groupId)
         IF NOT EXISTS (
           SELECT 1 FROM pg_constraint WHERE conname = 'ContactGroup_contactId_groupId_key'
         ) AND NOT EXISTS (
@@ -30,13 +28,98 @@ export async function ensureDbSchemaSync() {
           ALTER TABLE "ContactGroup" ADD CONSTRAINT "ContactGroup_contactId_groupId_key" UNIQUE ("contactId", "groupId");
         END IF;
 
-        -- Add createdAt column if not exists
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns 
           WHERE table_name='ContactGroup' AND column_name='createdAt'
         ) THEN
           ALTER TABLE "ContactGroup" ADD COLUMN "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
         END IF;
+
+        -- 2. Create Subscriber table if not exists
+        CREATE TABLE IF NOT EXISTS "Subscriber" (
+          "id" TEXT PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "phone" TEXT UNIQUE NOT NULL,
+          "email" TEXT,
+          "company" TEXT,
+          "notes" TEXT,
+          "channels" JSONB DEFAULT '["WhatsApp"]'::jsonb,
+          "preferredTime" TEXT DEFAULT '08:00',
+          "language" TEXT DEFAULT 'TR',
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "isInteractive" BOOLEAN NOT NULL DEFAULT false,
+          "isBlacklisted" BOOLEAN NOT NULL DEFAULT false,
+          "lastSentAt" TIMESTAMP(3),
+          "customFields" JSONB DEFAULT '{}'::jsonb,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 3. Create SubscriberGroup table if not exists
+        CREATE TABLE IF NOT EXISTS "SubscriberGroup" (
+          "id" TEXT PRIMARY KEY,
+          "subscriberId" TEXT NOT NULL REFERENCES "Subscriber"("id") ON DELETE CASCADE,
+          "groupId" TEXT NOT NULL REFERENCES "Group"("id") ON DELETE CASCADE,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "SubscriberGroup_subscriberId_groupId_key" UNIQUE ("subscriberId", "groupId")
+        );
+
+        -- 4. Create Domain table if not exists
+        CREATE TABLE IF NOT EXISTS "Domain" (
+          "id" TEXT PRIMARY KEY,
+          "name" TEXT UNIQUE NOT NULL,
+          "subscriberId" TEXT REFERENCES "Subscriber"("id") ON DELETE SET NULL,
+          "registrar" TEXT DEFAULT 'METUNIC',
+          "expiryDate" TIMESTAMP(3) NOT NULL,
+          "sslExpiryDate" TIMESTAMP(3),
+          "autoRenew" BOOLEAN NOT NULL DEFAULT false,
+          "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+          "price" DOUBLE PRECISION DEFAULT 250,
+          "currency" TEXT DEFAULT 'TL',
+          "notes" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 5. Create Order table if not exists
+        CREATE TABLE IF NOT EXISTS "Order" (
+          "id" TEXT PRIMARY KEY,
+          "orderNumber" TEXT UNIQUE NOT NULL,
+          "subscriberId" TEXT REFERENCES "Subscriber"("id") ON DELETE SET NULL,
+          "domainId" TEXT REFERENCES "Domain"("id") ON DELETE SET NULL,
+          "title" TEXT NOT NULL,
+          "amount" DOUBLE PRECISION NOT NULL,
+          "currency" TEXT NOT NULL DEFAULT 'TL',
+          "status" TEXT NOT NULL DEFAULT 'PENDING',
+          "items" JSONB DEFAULT '[]'::jsonb,
+          "validUntil" TIMESTAMP(3),
+          "notes" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 6. Create NotificationLog table if not exists
+        CREATE TABLE IF NOT EXISTS "NotificationLog" (
+          "id" TEXT PRIMARY KEY,
+          "subscriberId" TEXT REFERENCES "Subscriber"("id") ON DELETE SET NULL,
+          "domainId" TEXT REFERENCES "Domain"("id") ON DELETE SET NULL,
+          "channel" TEXT NOT NULL DEFAULT 'WhatsApp',
+          "type" TEXT NOT NULL DEFAULT 'DOMAIN_RENEWAL',
+          "status" TEXT NOT NULL DEFAULT 'SENT',
+          "recipient" TEXT NOT NULL,
+          "content" TEXT NOT NULL,
+          "error" TEXT,
+          "sentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 7. Create SystemConfig table if not exists
+        CREATE TABLE IF NOT EXISTS "SystemConfig" (
+          "id" TEXT PRIMARY KEY,
+          "key" TEXT UNIQUE NOT NULL,
+          "value" JSONB NOT NULL,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
       END $$;
     `);
 
