@@ -166,6 +166,7 @@ function CampaignsContent() {
           templateId: selectedTemplateId || null,
           customContent: customMessage,
           groupIds: selectedGroups,
+          targetGroupIds: selectedGroups,
           minDelay: Number(minDelay),
           maxDelay: Number(maxDelay),
           batchSize: Number(batchSize),
@@ -416,6 +417,18 @@ function CampaignsContent() {
                   )}
                 </div>
 
+                {/* Recipient summary banner */}
+                {selectedGroups.length > 0 && (
+                  <div className="p-3 rounded-2xl bg-[#10b981]/15 border border-[#10b981]/30 flex items-center justify-between text-xs">
+                    <span className="text-gray-300 font-medium">
+                      🎯 Seçilen Grup: <strong className="text-white font-bold">{groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join(", ")}</strong>
+                    </span>
+                    <span className="font-mono font-bold text-[#10b981] bg-[#10b981]/20 px-2.5 py-1 rounded-full border border-[#10b981]/30">
+                      {groups.filter(g => selectedGroups.includes(g.id)).reduce((acc, g) => acc + (g.memberCount ?? g.contacts?.length ?? g.subscribers?.length ?? g._count?.contacts ?? g._count?.subscribers ?? 0), 0)} Kişi Hedeflendi
+                    </span>
+                  </div>
+                )}
+
                 {groups.length === 0 ? (
                   <div className="p-8 text-center bg-[#161a1d] border border-[#23292e] rounded-2xl space-y-2">
                     <FolderTree className="w-8 h-8 mx-auto text-[#d4af37] opacity-40" />
@@ -431,20 +444,22 @@ function CampaignsContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {groups.map((g) => {
                       const isSelected = selectedGroups.includes(g.id);
+                      const memberCount = g.memberCount ?? g.contacts?.length ?? g.subscribers?.length ?? g._count?.contacts ?? g._count?.subscribers ?? 0;
                       return (
                         <div
                           key={g.id}
                           onClick={() => toggleGroupSelection(g.id)}
                           className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                             isSelected
-                              ? "bg-[#16291e] border-[#10b981] text-white"
+                              ? "bg-[#16291e] border-[#10b981] text-white shadow-lg shadow-[#10b981]/5"
                               : "bg-[#161a1d] border-[#2e353c] text-gray-300 hover:border-[#d4af37]/40"
                           }`}
                         >
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-bold truncate">{g.name}</div>
-                            <div className="text-[10px] text-gray-400 truncate mt-0.5">
-                              {g._count?.contacts || g._count?.subscribers || 0} Kişi
+                            <div className="text-[11px] font-mono text-gray-400 truncate mt-0.5 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+                              <span>{memberCount} Aktif Abone</span>
                             </div>
                           </div>
                           <div className={`w-5 h-5 rounded-lg border flex items-center justify-center ${
@@ -611,18 +626,30 @@ function CampaignsContent() {
             {/* Step 4: Özet ve Onay */}
             {wizardStep === 4 && (
               <div className="space-y-4 flex-1 overflow-y-auto">
-                <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#23292e] space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-[#23292e]">
+                <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#23292e] space-y-3 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-[#23292e]">
                     <span className="text-gray-400">Kampanya Adı:</span>
                     <span className="font-bold text-white">{campaignTitle}</span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-[#23292e]">
-                    <span className="text-gray-400">Seçili Grup Sayısı:</span>
-                    <span className="font-bold text-[#d4af37] font-mono">{selectedGroups.length} Grup</span>
+                  <div className="flex justify-between py-1.5 border-b border-[#23292e]">
+                    <span className="text-gray-400">Hedef Grup(lar):</span>
+                    <span className="font-bold text-[#d4af37] font-mono">
+                      {groups.filter(g => selectedGroups.includes(g.id)).map(g => `${g.name} (${g.memberCount ?? g.contacts?.length ?? g.subscribers?.length ?? g._count?.contacts ?? g._count?.subscribers ?? 0} Kişi)`).join(", ")}
+                    </span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-[#23292e]">
+                  <div className="flex justify-between py-1.5 border-b border-[#23292e]">
+                    <span className="text-gray-400">Toplam Gönderilecek Kişi:</span>
+                    <span className="font-bold text-[#10b981] font-mono text-sm">
+                      {groups.filter(g => selectedGroups.includes(g.id)).reduce((acc, g) => acc + (g.memberCount ?? g.contacts?.length ?? g.subscribers?.length ?? g._count?.contacts ?? g._count?.subscribers ?? 0), 0)} Kişi
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-[#23292e]">
                     <span className="text-gray-400">Gecikme Aralığı:</span>
                     <span className="font-mono text-[#10b981]">{minDelay} - {maxDelay} sn / mesaj</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#10b981]/10 border border-[#10b981]/25 text-[11px] text-[#10b981] flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0 text-[#10b981]" />
+                    <span><strong>Korumalı Hedefleme:</strong> Mesajlar SADECE seçilen gruptaki üyelere gönderilir, genel rehberdeki diğer kişilere kesinlikle mesaj iletilmez.</span>
                   </div>
                   <div className="pt-2">
                     <span className="text-gray-400 block mb-1">Gönderilecek Mesaj:</span>

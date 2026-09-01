@@ -21,13 +21,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       newStatus = 'PROCESSING';
     } else if (action === 'cancel') {
       newStatus = 'CANCELLED';
+      // Immediately cancel all queued messages in DB
+      await prisma.message.updateMany({
+        where: {
+          campaignId: params.id,
+          status: 'QUEUED',
+        },
+        data: {
+          status: 'FAILED',
+          errorMessage: 'Kampanya kullanıcı tarafından durduruldu / iptal edildi',
+        },
+      });
     } else {
       return NextResponse.json({ error: 'Geçersiz aksiyon (pause, resume, cancel)' }, { status: 400 });
     }
 
     const updated = await prisma.campaign.update({
       where: { id: params.id },
-      data: { status: newStatus },
+      data: { 
+        status: newStatus,
+        completedAt: newStatus === 'CANCELLED' ? new Date() : undefined,
+      },
     });
 
     return NextResponse.json({

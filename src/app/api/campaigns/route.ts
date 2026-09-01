@@ -62,34 +62,98 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Mesaj içeriği veya şablon seçilmelidir.' }, { status: 400 });
     }
 
-    // 1. Fetch Target Contacts
+    // 1. Fetch Target Contacts & Group Members strictly
     let targetContacts: any[] = [];
 
-    if (Array.isArray(targetGroupIds) && targetGroupIds.length > 0) {
+    const resolvedGroupIds = (Array.isArray(targetGroupIds) && targetGroupIds.length > 0)
+      ? targetGroupIds
+      : (Array.isArray(body.groupIds) && body.groupIds.length > 0)
+        ? body.groupIds
+        : (body.groupId ? [body.groupId] : []);
+
+    const resolvedContactIds = (Array.isArray(contactIds) && contactIds.length > 0)
+      ? contactIds
+      : (Array.isArray(body.targetContactIds) && body.targetContactIds.length > 0)
+        ? body.targetContactIds
+        : [];
+
+    if (resolvedGroupIds.length > 0) {
+      // 1a. Fetch from Contact table matching selected groups
       const groupContacts = await prisma.contact.findMany({
         where: {
           groups: {
             some: {
-              groupId: { in: targetGroupIds },
+              groupId: { in: resolvedGroupIds },
             },
           },
           isBlacklisted: false,
         },
       });
-      targetContacts = [...targetContacts, ...groupContacts];
-    } else if (Array.isArray(contactIds) && contactIds.length > 0) {
+
+      // 1b. Fetch from Subscriber table matching selected groups
+      const groupSubscribers = await prisma.subscriber.findMany({
+        where: {
+          groups: {
+            some: {
+              groupId: { in: resolvedGroupIds },
+            },
+          },
+          isBlacklisted: false,
+          isActive: true,
+        },
+      });
+
+      const subscriberAsContacts = groupSubscribers.map((s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone,
+        email: s.email,
+        customFields: s.customFields,
+      }));
+
+      targetContacts = [...groupContacts, ...subscriberAsContacts];
+    } else if (resolvedContactIds.length > 0) {
       const individualContacts = await prisma.contact.findMany({
         where: {
-          id: { in: contactIds },
+          id: { in: resolvedContactIds },
           isBlacklisted: false,
         },
       });
-      targetContacts = [...targetContacts, ...individualContacts];
-    } else {
-      // Default: All active contacts
-      targetContacts = await prisma.contact.findMany({
+      const individualSubscribers = await prisma.subscriber.findMany({
+        where: {
+          id: { in: resolvedContactIds },
+          isBlacklisted: false,
+          isActive: true,
+        },
+      });
+      const subAsContacts = individualSubscribers.map((s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone,
+        email: s.email,
+        customFields: s.customFields,
+      }));
+      targetContacts = [...individualContacts, ...subAsContacts];
+    } else if (body.sendToAll === true) {
+      // Explicitly requested send to all active contacts
+      const allContacts = await prisma.contact.findMany({
         where: { isBlacklisted: false },
       });
+      const allSubscribers = await prisma.subscriber.findMany({
+        where: { isBlacklisted: false, isActive: true },
+      });
+      const subAsContacts = allSubscribers.map((s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone,
+        email: s.email,
+        customFields: s.customFields,
+      }));
+      targetContacts = [...allContacts, ...subAsContacts];
+    } else {
+      return NextResponse.json({
+        error: 'Hedef grup seçilmedi. Lütfen mesaj göndermek istediğiniz grubu seçiniz.',
+      }, { status: 400 });
     }
 
     // Deduplicate by phone
@@ -104,7 +168,7 @@ export async function POST(req: NextRequest) {
 
     if (finalContacts.length === 0) {
       return NextResponse.json({
-        error: 'Kampanya için geçerli hedef kişi bulunamadı (Tüm kişiler kara listede veya seçilen grup boş).',
+        error: 'Seçilen grupta aktif abone bulunamadı veya tüm üyeler kara listede.',
       }, { status: 400 });
     }
 
