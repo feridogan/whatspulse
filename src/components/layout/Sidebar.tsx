@@ -8,30 +8,35 @@ import {
   LayoutDashboard, 
   MessageSquare, 
   Users, 
-  Calendar, 
   FolderTree, 
+  FileText,
+  Send,
+  UserCheck,
   Settings, 
   LogOut,
   ShieldCheck,
-  Activity
+  Activity,
+  UserPlus
 } from 'lucide-react';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, isAdmin } = useAuth();
 
   const menuItems = [
     { href: '/', label: 'Panel', icon: LayoutDashboard },
     { href: '/chat', label: 'Canlı Sohbet', icon: MessageSquare, badge: 'Canlı' },
     { href: '/subscribers', label: 'Aboneler / Kişiler', icon: Users, badge: 'Rehber' },
-    { href: '/special-days', label: 'Özel Günler', icon: Calendar },
     { href: '/groups', label: 'Gruplar', icon: FolderTree },
+    { href: '/templates', label: 'Mesaj Şablonları', icon: FileText, badge: 'Şablon' },
+    { href: '/campaigns', label: 'Toplu Mesaj Gönderimi', icon: Send, badge: 'Toplu' },
+    { href: '/users', label: 'Kullanıcı Yönetimi', icon: UserCheck },
     { href: '/settings', label: 'Ayarlar', icon: Settings },
   ];
 
   return (
     <aside className="hidden md:flex flex-col w-64 border-r border-[#23292e] bg-[#0e1113] shrink-0 min-h-[calc(100vh-57px)] p-3.5 justify-between">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="px-2 pt-1 flex items-center justify-between">
           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#d4af37]">
             WHATSPULSE MENÜ

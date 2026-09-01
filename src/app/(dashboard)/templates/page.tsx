@@ -1,16 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   FileText, 
   Plus, 
   Trash2, 
   Sparkles, 
   Image as ImageIcon, 
-  Smartphone, 
   Check, 
   Copy,
-  Tag
+  Tag,
+  Search,
+  RefreshCw,
+  Send,
+  X,
+  MessageSquare,
+  Bookmark
 } from 'lucide-react';
 import { replacePlaceholders } from '@/lib/utils';
 
@@ -18,6 +24,8 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -30,11 +38,9 @@ export default function TemplatesPage() {
   const availableTags = [
     { tag: '{ad}', label: 'Ad', sample: 'Ahmet' },
     { tag: '{soyad}', label: 'Soyad', sample: 'Yılmaz' },
-    { tag: '{isim}', label: 'Tam İsim', sample: 'Ahmet Yılmaz' },
     { tag: '{telefon}', label: 'Telefon', sample: '+90 532 123 45 67' },
-    { tag: '{firma}', label: 'Firma / Şirket', sample: 'Çakırlar A.Ş.' },
-    { tag: '{sehir}', label: 'Şehir', sample: 'İstanbul' },
-    { tag: '{borc}', label: 'Borç / Tutar', sample: '1.250 TL' },
+    { tag: '{özel_not}', label: 'Özel Not', sample: 'Özel Müşteri Notu' },
+    { tag: '{firma}', label: 'Firma', sample: 'Çakırlar Ltd.' },
     { tag: '{tarih}', label: 'Bugünün Tarihi', sample: new Date().toLocaleDateString('tr-TR') },
     { tag: '{saat}', label: 'Saat', sample: '14:30' },
   ];
@@ -61,12 +67,14 @@ export default function TemplatesPage() {
   const handleInsertTag = (tag: string) => {
     setForm((prev) => ({
       ...prev,
-      content: prev.content + ' ' + tag,
+      content: (prev.content ? prev.content + ' ' : '') + tag + ' ',
     }));
   };
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name.trim() || !form.content.trim()) return;
+
     try {
       const res = await fetch('/api/templates', {
         method: 'POST',
@@ -94,207 +102,273 @@ export default function TemplatesPage() {
     }
   };
 
-  const previewText = replacePlaceholders(form.content || 'Sayın {ad} {soyad}, {firma} adına düzenlenen mesajınız hazır!', {
+  const handleCopyContent = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const previewText = replacePlaceholders(form.content || 'Sayın {ad} {soyad}, {firma} adına iletilen mesajınız hazır!', {
     ad: 'Ahmet',
     soyad: 'Yılmaz',
-    isim: 'Ahmet Yılmaz',
-    telefon: '905321234567',
+    telefon: '+90 532 123 45 67',
+    özel_not: 'Kampanya İndirimi',
     firma: 'Çakırlar A.Ş.',
-    sehir: 'İstanbul',
-    borc: '1.250 TL',
+    tarih: new Date().toLocaleDateString('tr-TR'),
+    saat: '14:30',
   });
 
+  const filteredTemplates = templates.filter(t => 
+    t.name?.toLowerCase().includes(search.toLowerCase()) || 
+    t.content?.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-              {templates.length} Hazır Şablon
+            <span className="px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-xs font-bold border border-[#d4af37]/30 font-serif-title">
+              ŞABLON MERKEZİ
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Mesaj Şablonları & Değişkenler</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-white mt-1 font-serif-title">
+            WhatsApp Mesaj Şablonları
+          </h1>
           <p className="text-xs text-gray-400">
-            Dinamik etiketler (&#123;ad&#125;, &#123;soyad&#125;, &#123;firma&#125;) ve medya ekleriyle kişiye özel mesaj hazırlayın.
+            Dinamik değişkenli ({`{ad}`}, {`{soyad}`}, {`{özel_not}`}) hazır mesaj kalıpları oluşturun ve toplu gönderimlerde kullanın.
           </p>
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all self-start sm:self-auto"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4" />
-          <span>Yeni Şablon Oluştur</span>
+          <Plus className="w-4 h-4 text-black" />
+          <span>+ Yeni Şablon Oluştur</span>
+        </button>
+      </div>
+
+      {/* Filter / Search Bar */}
+      <div className="p-4 rounded-2xl bg-[#121517] border border-[#23292e] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            placeholder="🔍 Şablon başlığı veya içerikte ara..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl pl-9 pr-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+          />
+        </div>
+
+        <button
+          onClick={loadTemplates}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] text-xs font-bold cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#d4af37]' : ''}`} />
+          <span>Yenile</span>
         </button>
       </div>
 
       {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {templates.map((tpl) => (
-          <div key={tpl.id} className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 flex flex-col justify-between hover:border-emerald-500/30 transition-all shadow-lg">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-bold text-white flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-emerald-400" />
-                  {tpl.name}
-                </span>
-                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-300">
-                  {tpl.mediaType || 'text'}
-                </span>
-              </div>
-
-              {tpl.mediaUrl && (
-                <div className="mb-3 rounded-xl overflow-hidden h-32 bg-black/40">
-                  <img src={tpl.mediaUrl} alt={tpl.name} className="w-full h-full object-cover" />
-                </div>
-              )}
-
-              <div className="p-3 rounded-2xl bg-[#202c33]/40 border border-gray-800/80 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {tpl.content}
-              </div>
-
-              {Array.isArray(tpl.variables) && tpl.variables.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {tpl.variables.map((v: string) => (
-                    <span key={v} className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-mono">
-                      &#123;{v}&#125;
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-gray-800/80 flex items-center justify-end">
-              <button
-                onClick={() => handleDelete(tpl.id)}
-                className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 text-xs flex items-center gap-1 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Sil</span>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Create / Edit Template Modal with Live Phone Preview */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-3xl w-full p-6 shadow-2xl my-8">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-emerald-400" />
-              Yeni Şablon Oluştur
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Form Side */}
-              <form onSubmit={handleSaveTemplate} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1">Şablon Adı</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="Örn: Özel Kampanya Duyurusu"
-                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
+      {loading ? (
+        <div className="p-12 text-center text-gray-400 space-y-2">
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#d4af37]" />
+          <p className="text-xs">Şablonlar yükleniyor...</p>
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="p-12 text-center text-gray-500 bg-[#121517] border border-[#23292e] rounded-3xl space-y-3">
+          <FileText className="w-12 h-12 mx-auto opacity-30 text-[#d4af37]" />
+          <h3 className="text-sm font-bold text-gray-300 font-serif-title">Kayıtlı Şablon Bulunamadı</h3>
+          <p className="text-xs text-gray-500 max-w-sm mx-auto">
+            İlk mesaj şablonunuzu oluşturarak toplu gönderimlerinizi ve canlı sohbetlerinizi hızlandırın.
+          </p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-[#d4af37] border border-[#d4af37]/30 text-xs font-bold transition-all cursor-pointer"
+          >
+            + Şablon Ekle
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredTemplates.map((t) => (
+            <div
+              key={t.id}
+              className="p-5 rounded-3xl bg-[#121517] border border-[#23292e] hover:border-[#d4af37]/40 transition-all flex flex-col justify-between space-y-4 shadow-xl group"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider font-serif-title flex items-center gap-1.5">
+                    <Bookmark className="w-3.5 h-3.5 text-[#d4af37]" />
+                    {t.name}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 font-mono font-bold">
+                    {t.mediaType === 'image' ? 'Görselli' : 'Metin'}
+                  </span>
                 </div>
 
-                {/* Variable Inserters */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">
-                    Dinamik Değişken Ekle (Tıklayın):
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags.map((item) => (
-                      <button
-                        key={item.tag}
-                        type="button"
-                        onClick={() => handleInsertTag(item.tag)}
-                        className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono transition-colors"
-                      >
-                        + {item.tag}
-                      </button>
+                <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#23292e] text-xs text-gray-200 leading-relaxed font-sans whitespace-pre-wrap max-h-36 overflow-y-auto">
+                  {t.content}
+                </div>
+
+                {/* Variable tags preview */}
+                {Array.isArray(t.variables) && t.variables.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {t.variables.map((v: string) => (
+                      <span key={v} className="text-[10px] px-2 py-0.5 rounded-md bg-[#181c1f] text-gray-400 border border-[#2e353c] font-mono">
+                        {`{${v}}`}
+                      </span>
                     ))}
                   </div>
-                </div>
+                )}
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1">Mesaj Metni</label>
-                  <textarea
-                    rows={5}
-                    required
-                    value={form.content}
-                    onChange={(e) => setForm({ ...form, content: e.target.value })}
-                    placeholder="Sayın {ad} {soyad}, size özel fırsatlarımız..."
-                    className="w-full bg-[#202c33] border border-gray-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
-                  />
-                </div>
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-[#23292e]/60">
+                <Link
+                  href={`/campaigns?templateId=${t.id}`}
+                  className="flex items-center gap-1 text-xs font-bold text-[#10b981] hover:text-[#34d399] transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Toplu Gönder</span>
+                </Link>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1">Medya Türü & URL (İsteğe Bağlı)</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={form.mediaType}
-                      onChange={(e) => setForm({ ...form, mediaType: e.target.value })}
-                      className="bg-[#202c33] border border-gray-700 rounded-xl px-2 py-2 text-xs text-white"
-                    >
-                      <option value="text">Metin</option>
-                      <option value="image">Görsel (Image)</option>
-                      <option value="document">Belge (PDF)</option>
-                    </select>
-                    <input
-                      type="url"
-                      value={form.mediaUrl}
-                      onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-                      placeholder="https://example.com/gorsel.jpg"
-                      className="flex-1 bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-2">
+                <div className="flex items-center gap-1.5">
                   <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300"
+                    onClick={() => handleCopyContent(t.id, t.content)}
+                    className="p-2 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] transition-all cursor-pointer"
+                    title="Metni Kopyala"
                   >
-                    İptal
+                    {copiedId === t.id ? <Check className="w-3.5 h-3.5 text-[#10b981]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                   <button
-                    type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg"
+                    onClick={() => handleDelete(t.id)}
+                    className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all cursor-pointer"
+                    title="Şablonu Sil"
                   >
-                    Şablonu Kaydet
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                </div>
-              </form>
-
-              {/* Phone Mockup Side */}
-              <div className="flex flex-col items-center justify-center p-4 bg-[#0b141a] rounded-2xl border border-gray-800">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                  Canlı WhatsApp Önizlemesi
-                </div>
-
-                <div className="w-full max-w-[280px] bg-[#111b21] border-2 border-gray-700 rounded-3xl p-3 shadow-2xl relative overflow-hidden">
-                  <div className="h-4 w-24 bg-gray-800 rounded-full mx-auto mb-2" />
-                  
-                  {/* WhatsApp chat bubble */}
-                  <div className="bg-[#005c4b] text-white p-3 rounded-2xl rounded-tr-none text-xs shadow-md mt-4">
-                    {form.mediaUrl && (
-                      <div className="mb-2 rounded-lg overflow-hidden h-28 bg-black/40">
-                        <img src={form.mediaUrl} alt="Preview" className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap">{previewText}</p>
-                    <div className="text-[9px] text-gray-300/70 text-right mt-1">12:00 ✓✓</div>
-                  </div>
                 </div>
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* CREATE TEMPLATE MODAL */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-[#121517] border border-[#23292e] rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#d4af37]" />
+                <h3 className="text-base font-bold text-white font-serif-title">
+                  Yeni Şablon Tanımla
+                </h3>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTemplate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Şablon Başlığı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: Özel Kampanya & İndirim Duyurusu"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Medya Türü</label>
+                <select
+                  value={form.mediaType}
+                  onChange={(e) => setForm({ ...form, mediaType: e.target.value })}
+                  className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] cursor-pointer"
+                >
+                  <option value="text">Sadece Metin (Düz WhatsApp Mesajı)</option>
+                  <option value="image">Görsel / Resim Ekli Mesaj</option>
+                  <option value="document">PDF / Belge Ekli Mesaj</option>
+                </select>
+              </div>
+
+              {form.mediaType !== 'text' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Medya Dosya URL *</label>
+                  <input
+                    type="url"
+                    placeholder="https://cakirlar.net/gorsel.jpg"
+                    value={form.mediaUrl}
+                    onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+              )}
+
+              {/* Dynamic Tag insertion buttons */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5 font-serif-title">
+                  Dinamik Değişken Ekle (Tıklayarak Ekleyin):
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableTags.map((t) => (
+                    <button
+                      key={t.tag}
+                      type="button"
+                      onClick={() => handleInsertTag(t.tag)}
+                      className="px-2.5 py-1 rounded-lg bg-[#181c1f] hover:bg-[#202529] text-[#d4af37] border border-[#d4af37]/30 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span>+ {t.tag}</span>
+                      <span className="text-[10px] text-gray-400 font-sans">({t.label})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Mesaj İçeriği *</label>
+                <textarea
+                  required
+                  rows={5}
+                  placeholder="Merhaba {ad} {soyad}, WhatsPulse üzerinden size özel hazırlanan teklifimiz..."
+                  value={form.content}
+                  onChange={(e) => setForm({ ...form, content: e.target.value })}
+                  className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl p-3 text-xs text-white leading-relaxed focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+
+              {/* Real-time Preview Box */}
+              <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#d4af37]/30 space-y-1.5">
+                <span className="text-[10px] font-bold text-[#d4af37] uppercase font-serif-title">Canlı WhatsApp Önizleme</span>
+                <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap font-sans">
+                  {previewText}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#23292e]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181c1f] text-xs font-semibold text-gray-300 cursor-pointer"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-xs font-black shadow-lg shadow-[#d4af37]/20 cursor-pointer"
+                >
+                  Şablonu Kaydet
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

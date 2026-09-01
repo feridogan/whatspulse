@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { 
   Send, 
   Play, 
@@ -19,10 +21,19 @@ import {
   ChevronRight,
   RotateCcw,
   Copy,
-  Sparkles
+  Sparkles,
+  ArrowRight,
+  X,
+  Zap,
+  FolderTree
 } from "lucide-react";
+import { replacePlaceholders } from "@/lib/utils";
 
-export default function CampaignsPage() {
+function CampaignsContent() {
+  const searchParams = useSearchParams();
+  const preselectedGroupId = searchParams.get("groupId");
+  const preselectedTemplateId = searchParams.get("templateId");
+
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -32,18 +43,26 @@ export default function CampaignsPage() {
   // Wizard State
   const [wizardStep, setWizardStep] = useState(1);
   const [campaignTitle, setCampaignTitle] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(preselectedTemplateId || "");
   const [customMessage, setCustomMessage] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [minDelay, setMinDelay] = useState(8);
-  const [maxDelay, setMaxDelay] = useState(20);
+  const [minDelay, setMinDelay] = useState(5);
+  const [maxDelay, setMaxDelay] = useState(15);
   const [batchSize, setBatchSize] = useState(25);
-  const [batchPause, setBatchPause] = useState(60);
+  const [batchPause, setBatchPause] = useState(30);
   const [launching, setLaunching] = useState(false);
 
   // Detail Modal
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const availableTags = [
+    { tag: "{ad}", label: "Ad" },
+    { tag: "{soyad}", label: "Soyad" },
+    { tag: "{telefon}", label: "Telefon" },
+    { tag: "{özel_not}", label: "Özel Not" },
+    { tag: "{firma}", label: "Firma" },
+  ];
 
   const loadData = async () => {
     try {
@@ -60,7 +79,9 @@ export default function CampaignsPage() {
 
       if (Array.isArray(campData)) setCampaigns(campData);
       if (Array.isArray(tplData)) setTemplates(tplData);
-      if (Array.isArray(grpData)) setGroups(grpData);
+      if (Array.isArray(grpData)) {
+        setGroups(grpData);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -70,9 +91,33 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 5000);
+    const interval = setInterval(loadData, 6000);
     return () => clearInterval(interval);
   }, []);
+
+  // Preselection trigger
+  useEffect(() => {
+    if (preselectedGroupId) {
+      setSelectedGroups([preselectedGroupId]);
+      setShowWizard(true);
+      setWizardStep(1);
+    }
+    if (preselectedTemplateId) {
+      setSelectedTemplateId(preselectedTemplateId);
+      setShowWizard(true);
+    }
+  }, [preselectedGroupId, preselectedTemplateId]);
+
+  // Sync template selection with custom message
+  useEffect(() => {
+    if (selectedTemplateId) {
+      const found = templates.find((t) => t.id === selectedTemplateId);
+      if (found) {
+        setCustomMessage(found.content);
+        if (!campaignTitle) setCampaignTitle(`${found.name} Kampanyası`);
+      }
+    }
+  }, [selectedTemplateId, templates]);
 
   const handleAction = async (campaignId: string, action: "pause" | "resume" | "cancel") => {
     try {
@@ -97,72 +142,30 @@ export default function CampaignsPage() {
     }
   };
 
-  const handleOpenDetail = async (id: string) => {
-    try {
-      const res = await fetch(`/api/campaigns/${id}`);
-      const data = await res.json();
-      setSelectedCampaign(data);
-      setShowDetailModal(true);
-    } catch (err) {
-      console.error(err);
+  const handleCreateAndLaunch = async () => {
+    if (!campaignTitle.trim()) {
+      alert("Lütfen kampanya başlığı giriniz.");
+      return;
     }
-  };
-
-  // Clone / Re-launch Campaign (Pre-fills Wizard for Editing & Re-sending)
-  const handleCloneCampaign = async (camp: any) => {
-    try {
-      let fullCamp = camp;
-      if (!camp.messages || !camp.template) {
-        const res = await fetch(`/api/campaigns/${camp.id}`);
-        if (res.ok) {
-          fullCamp = await res.json();
-        }
-      }
-
-      setCampaignTitle(`${fullCamp.title || "Kampanya"} (Tekrar)`);
-      setSelectedTemplateId(fullCamp.templateId || "");
-
-      const initialContent = 
-        fullCamp.template?.content || 
-        fullCamp.messages?.[0]?.content || 
-        "";
-      setCustomMessage(initialContent);
-
-      if (groups.length > 0) {
-        setSelectedGroups(groups.map((g: any) => g.id));
-      }
-
-      setMinDelay(fullCamp.minDelay || 8);
-      setMaxDelay(fullCamp.maxDelay || 20);
-      setBatchSize(fullCamp.batchSize || 25);
-      setBatchPause(fullCamp.batchPause || 60);
-
-      setWizardStep(1);
-      setShowWizard(true);
-      setShowDetailModal(false);
-    } catch (err: any) {
-      console.error("Kampanya klonlama hatası:", err);
+    if (!customMessage.trim()) {
+      alert("Lütfen mesaj metni giriniz.");
+      return;
     }
-  };
+    if (selectedGroups.length === 0) {
+      alert("Lütfen en az bir hedef grup seçiniz.");
+      return;
+    }
 
-  const insertVariable = (tag: string) => {
-    setCustomMessage((prev) => (prev ? `${prev} {${tag}}` : `{${tag}}`));
-  };
-
-  const handleLaunchCampaign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!campaignTitle) return;
-
-    setLaunching(true);
     try {
+      setLaunching(true);
       const res = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: campaignTitle,
-          templateId: selectedTemplateId || undefined,
-          customContent: customMessage || undefined,
-          targetGroupIds: selectedGroups,
+          templateId: selectedTemplateId || null,
+          customContent: customMessage,
+          groupIds: selectedGroups,
           minDelay: Number(minDelay),
           maxDelay: Number(maxDelay),
           batchSize: Number(batchSize),
@@ -175,7 +178,6 @@ export default function CampaignsPage() {
         setShowWizard(false);
         setWizardStep(1);
         setCampaignTitle("");
-        setSelectedTemplateId("");
         setCustomMessage("");
         setSelectedGroups([]);
         loadData();
@@ -189,532 +191,510 @@ export default function CampaignsPage() {
     }
   };
 
+  const toggleGroupSelection = (groupId: string) => {
+    setSelectedGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
+
+  const selectAllGroups = () => {
+    if (selectedGroups.length === groups.length) {
+      setSelectedGroups([]);
+    } else {
+      setSelectedGroups(groups.map((g) => g.id));
+    }
+  };
+
+  const insertTag = (tag: string) => {
+    setCustomMessage((prev) => (prev ? prev + " " : "") + tag + " ");
+  };
+
+  const previewMessage = replacePlaceholders(customMessage || "Sayın {ad} {soyad}, WhatsPulse mesajınız iletildi.", {
+    ad: "Ahmet",
+    soyad: "Yılmaz",
+    telefon: "+90 532 123 45 67",
+    özel_not: "VIP Özel İndirim",
+    firma: "Çakırlar A.Ş.",
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-              Anti-Ban BullMQ Motoru
+            <span className="px-2.5 py-0.5 rounded-full bg-[#10b981]/15 text-[#10b981] text-xs font-bold border border-[#10b981]/30 font-serif-title">
+              TOPLU GÖNDERİM & KUYRUK
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Toplu Mesaj & Kuyruk Yönetimi</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-white mt-1 font-serif-title">
+            Toplu WhatsApp Kampanyaları
+          </h1>
           <p className="text-xs text-gray-400">
-            Akıllı insansı gecikme (8-20 sn) ve parti molalarıyla spam engeline takılmadan toplu gönderim yapın.
+            Hedef müşteri gruplarına insansı gecikme (5-15 sn) ve anti-spam korumasıyla toplu mesaj gönderin.
           </p>
         </div>
 
         <button
           onClick={() => {
-            setCampaignTitle("");
-            setSelectedTemplateId("");
-            setCustomMessage("");
-            setSelectedGroups(groups.map((g: any) => g.id));
             setShowWizard(true);
             setWizardStep(1);
           }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-all self-start sm:self-auto cursor-pointer"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4" />
-          <span>Yeni Kampanya Başlat</span>
+          <Plus className="w-4 h-4 text-black" />
+          <span>🚀 Yeni Toplu Gönderim Başlat</span>
         </button>
       </div>
 
-      {/* Campaigns List / Monitor */}
-      <div className="space-y-4">
-        {campaigns.length === 0 ? (
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl p-12 text-center text-gray-500">
-            <Send className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <h3 className="text-sm font-semibold text-gray-300 mb-1">Henüz Kampanya Başlatılmadı</h3>
-            <p className="text-xs text-gray-500 mb-4">Yukarıdaki butonu kullanarak ilk toplu mesaj kampanyasını oluşturabilirsiniz.</p>
+      {/* Campaigns List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-400 font-serif-title">
+            GÖNDERİM GEÇMİŞİ VE CANLI KUYRUK ({campaigns.length})
+          </span>
+          <button
+            onClick={loadData}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] text-xs font-bold cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-[#d4af37]" : ""}`} />
+            <span>Yenile</span>
+          </button>
+        </div>
+
+        {loading && campaigns.length === 0 ? (
+          <div className="p-12 text-center text-gray-400 space-y-2 bg-[#121517] border border-[#23292e] rounded-3xl">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#d4af37]" />
+            <p className="text-xs">Kampanyalar yükleniyor...</p>
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div className="p-12 text-center text-gray-500 bg-[#121517] border border-[#23292e] rounded-3xl space-y-3">
+            <Send className="w-12 h-12 mx-auto opacity-30 text-[#10b981]" />
+            <h3 className="text-sm font-bold text-gray-300 font-serif-title">Henüz Gönderim Yapılmadı</h3>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto">
+              Gruplarınıza veya abonelerinize toplu WhatsApp mesajı göndermek için yukarıdaki butona tıklayın.
+            </p>
           </div>
         ) : (
-          campaigns.map((camp) => {
-            const total = camp.totalCount || 0;
-            const processed = (camp.sentCount || 0) + (camp.failedCount || 0);
-            const progress = total > 0 ? Math.round((processed / total) * 100) : 0;
-            const isProcessing = camp.status === "PROCESSING";
+          <div className="grid grid-cols-1 gap-4">
+            {campaigns.map((camp) => {
+              const progress = camp.totalCount > 0 ? Math.round((camp.sentCount / camp.totalCount) * 100) : 0;
+              const isProcessing = camp.status === "PROCESSING" || camp.status === "QUEUED";
 
-            return (
-              <div
-                key={camp.id}
-                className="bg-[#111b21] border border-gray-800 rounded-3xl p-5 sm:p-6 hover:border-gray-700 transition-all shadow-lg"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold text-white">{camp.title}</h2>
-                      <span className={`text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full ${
-                        camp.status === "COMPLETED" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
-                        camp.status === "PROCESSING" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse" :
-                        camp.status === "PAUSED" ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" :
-                        "bg-red-500/20 text-red-400 border border-red-500/30"
-                      }`}>
-                        {camp.status === "COMPLETED" ? "Tamamlandı" :
-                         camp.status === "PROCESSING" ? "Gönderiliyor..." :
-                         camp.status === "PAUSED" ? "Duraklatıldı" :
-                         camp.status === "CANCELLED" ? "İptal Edildi" : camp.status}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-1">
-                      {camp.template && (
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                          Şablon: {camp.template.name}
+              return (
+                <div
+                  key={camp.id}
+                  className="p-5 rounded-3xl bg-[#121517] border border-[#23292e] hover:border-[#d4af37]/40 transition-all space-y-4 shadow-xl"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-white font-serif-title">{camp.title}</h3>
+                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold border ${
+                          camp.status === "COMPLETED"
+                            ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                            : isProcessing
+                            ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/30 animate-pulse"
+                            : camp.status === "PAUSED"
+                            ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                            : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                        }`}>
+                          {camp.status === "COMPLETED" ? "TAMAMLANDI" : isProcessing ? "GÖNDERİLİYOR" : camp.status}
                         </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Başlangıç: {new Date(camp.createdAt).toLocaleString("tr-TR")}
+                      </p>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      {isProcessing && (
+                        <button
+                          onClick={() => handleAction(camp.id, "pause")}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 text-xs font-bold cursor-pointer"
+                        >
+                          <Pause className="w-3.5 h-3.5" />
+                          <span>Duraklat</span>
+                        </button>
                       )}
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-teal-400" />
-                        Gecikme: {camp.minDelay}-{camp.maxDelay} sn
-                      </span>
+                      {camp.status === "PAUSED" && (
+                        <button
+                          onClick={() => handleAction(camp.id, "resume")}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/20 text-xs font-bold cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          <span>Devam Et</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(camp.id)}
+                        className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all cursor-pointer"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Tekrar Gönder / Klonla Butonu */}
-                    <button
-                      type="button"
-                      onClick={() => handleCloneCampaign(camp)}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="Bu kampanyayı düzenleyip tekrar gönder"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Tekrar Gönder</span>
-                    </button>
-
-                    {isProcessing && (
-                      <button
-                        onClick={() => handleAction(camp.id, "pause")}
-                        className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-semibold flex items-center gap-1 border border-amber-500/20"
-                      >
-                        <Pause className="w-3.5 h-3.5" />
-                        <span>Duraklat</span>
-                      </button>
-                    )}
-
-                    {camp.status === "PAUSED" && (
-                      <button
-                        onClick={() => handleAction(camp.id, "resume")}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-semibold flex items-center gap-1 border border-emerald-500/20"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Devam Et</span>
-                      </button>
-                    )}
-
-                    {(isProcessing || camp.status === "PAUSED") && (
-                      <button
-                        onClick={() => handleAction(camp.id, "cancel")}
-                        className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 text-xs font-semibold flex items-center gap-1 border border-red-500/20"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>İptal Et</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleOpenDetail(camp.id)}
-                      className="px-3 py-1.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-xs font-semibold text-gray-200 border border-gray-700"
-                    >
-                      Kayıtlar
-                    </button>
-
-                    <button
-                      onClick={() => handleDelete(camp.id)}
-                      className="p-1.5 rounded-xl text-red-400 hover:bg-red-500/20 transition-colors"
-                      title="Sil"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {/* Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-gray-400">İlerleme: %{progress}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[#10b981] font-bold">✓ İletilen: {camp.sentCount}</span>
+                        <span className="text-rose-400 font-bold">✗ Hatalı: {camp.failedCount}</span>
+                        <span className="text-gray-400">Toplam: {camp.totalCount}</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-[#181c1f] overflow-hidden border border-[#2e353c]">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#d4af37] to-[#10b981] transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-
-                {/* Progress Bar & Counters */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-                    <span>İlerleme: %{progress}</span>
-                    <span>
-                      <strong className="text-emerald-400">{camp.sentCount}</strong> Başarılı /{" "}
-                      <strong className="text-red-400">{camp.failedCount}</strong> Başarısız /{" "}
-                      <strong className="text-white">{camp.totalCount}</strong> Toplam
-                    </span>
-                  </div>
-
-                  <div className="w-full h-3 bg-[#202c33] rounded-full overflow-hidden p-0.5 border border-gray-800">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        camp.status === "COMPLETED" ? "bg-emerald-500" :
-                        camp.status === "PAUSED" ? "bg-blue-500" :
-                        "bg-gradient-to-r from-emerald-500 to-teal-400"
-                      }`}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Multi-Step Campaign Launch Wizard Modal */}
+      {/* TOPLU GÖNDERİM SİHİRBAZI MODALI (4 ADIM) */}
       {showWizard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl">
-            {/* Step Indicators */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  wizardStep === 1 ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400"
-                }`}>1</span>
-                <span className="text-xs font-semibold text-white">Mesaj & İçerik</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-[#121517] border border-[#23292e] rounded-3xl max-w-3xl w-full p-5 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] space-y-4">
+            {/* Wizard Header & Stepper */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
+              <div>
+                <h3 className="text-base font-bold text-white font-serif-title">
+                  Toplu WhatsApp Gönderim Sihirbazı
+                </h3>
+                <p className="text-[11px] text-gray-400">
+                  Adım {wizardStep} / 4 : {
+                    wizardStep === 1 ? "Hedef Kitle Seçimi" :
+                    wizardStep === 2 ? "Mesaj & Şablon" :
+                    wizardStep === 3 ? "Anti-Spam & Gecikme Ayarları" :
+                    "Onay ve Gönderim"
+                  }
+                </p>
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-600" />
-              <div className="flex items-center gap-2">
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  wizardStep === 2 ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400"
-                }`}>2</span>
-                <span className="text-xs font-semibold text-white">Hedef Kitle</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-600" />
-              <div className="flex items-center gap-2">
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  wizardStep === 3 ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400"
-                }`}>3</span>
-                <span className="text-xs font-semibold text-white">Anti-Ban Ayarları</span>
-              </div>
+              <button onClick={() => setShowWizard(false)} className="text-gray-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleLaunchCampaign}>
-              {/* STEP 1: Content & Title */}
-              {wizardStep === 1 && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1">Kampanya Başlığı *</label>
-                    <input
-                      type="text"
-                      required
-                      value={campaignTitle}
-                      onChange={(e) => setCampaignTitle(e.target.value)}
-                      placeholder="Örn: 2026 Bahar İndirimi Duyurusu"
-                      className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
+            {/* Stepper Indicator */}
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((step) => (
+                <div
+                  key={step}
+                  onClick={() => step < wizardStep && setWizardStep(step)}
+                  className={`h-1.5 rounded-full transition-all ${
+                    step <= wizardStep ? "bg-[#10b981]" : "bg-[#23292e]"
+                  }`}
+                />
+              ))}
+            </div>
 
+            {/* Step 1: Hedef Kitle (Gruplar) */}
+            {wizardStep === 1 && (
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-200 font-serif-title uppercase">
+                    Hedef Grupları Seçin ({selectedGroups.length}/{groups.length})
+                  </label>
+                  {groups.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={selectAllGroups}
+                      className="text-xs font-bold text-[#d4af37] hover:underline cursor-pointer"
+                    >
+                      {selectedGroups.length === groups.length ? "Tümünün Seçimini Kaldır" : "Tüm Grupları Seç"}
+                    </button>
+                  )}
+                </div>
+
+                {groups.length === 0 ? (
+                  <div className="p-8 text-center bg-[#161a1d] border border-[#23292e] rounded-2xl space-y-2">
+                    <FolderTree className="w-8 h-8 mx-auto text-[#d4af37] opacity-40" />
+                    <p className="text-xs text-gray-300">Henüz tanımlı grup bulunmamaktadır.</p>
+                    <Link
+                      href="/groups"
+                      className="inline-block px-3 py-1.5 rounded-xl bg-[#10b981] text-white text-xs font-bold"
+                    >
+                      + Grup Oluştur
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {groups.map((g) => {
+                      const isSelected = selectedGroups.includes(g.id);
+                      return (
+                        <div
+                          key={g.id}
+                          onClick={() => toggleGroupSelection(g.id)}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? "bg-[#16291e] border-[#10b981] text-white"
+                              : "bg-[#161a1d] border-[#2e353c] text-gray-300 hover:border-[#d4af37]/40"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold truncate">{g.name}</div>
+                            <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                              {g._count?.contacts || g._count?.subscribers || 0} Kişi
+                            </div>
+                          </div>
+                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center ${
+                            isSelected ? "bg-[#10b981] border-[#10b981] text-black" : "border-gray-500"
+                          }`}>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Mesaj & Şablon Seçimi */}
+            {wizardStep === 2 && (
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                    Kampanya Başlığı *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Örn: 2026 Bahar Özel İndirim Duyurusu"
+                    value={campaignTitle}
+                    onChange={(e) => setCampaignTitle(e.target.value)}
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+
+                {templates.length > 0 && (
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1">
-                      Hazır Şablon Seçin (Opsiyonel)
+                    <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                      Kayıtlı Şablonlardan Seçin (Opsiyonel)
                     </label>
                     <select
                       value={selectedTemplateId}
-                      onChange={(e) => {
-                        const tId = e.target.value;
-                        setSelectedTemplateId(tId);
-                        const selectedTpl = templates.find((t: any) => t.id === tId);
-                        if (selectedTpl) {
-                          setCustomMessage(selectedTpl.content);
-                        }
-                      }}
-                      className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      onChange={(e) => setSelectedTemplateId(e.target.value)}
+                      className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] cursor-pointer"
                     >
-                      <option value="">(Özel Mesaj Yaz / Düzenle)</option>
-                      {templates.map((t: any) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.content.substring(0, 35)}...)</option>
+                      <option value="">-- Özel Mesaj Yaz --</option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
                     </select>
                   </div>
+                )}
 
-                  {/* Message Content Area (Editable for both custom and template) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-semibold text-gray-400">
-                        Gönderilecek Mesaj Metni *
-                      </label>
-                      <span className="text-[11px] text-gray-500">
-                        {customMessage.length} karakter
-                      </span>
-                    </div>
-
-                    <textarea
-                      rows={5}
-                      required
-                      value={customMessage}
-                      onChange={(e) => setCustomMessage(e.target.value)}
-                      placeholder="Merhaba {isim}, mesajınızı buraya yazın..."
-                      className="w-full bg-[#202c33] border border-gray-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none font-sans"
-                    />
-
-                    {/* Dynamic Variable Chips */}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <span className="text-[10px] text-gray-500 flex items-center gap-1 mr-1">
-                        <Sparkles className="w-3 h-3 text-emerald-400" /> Değişken Ekle:
-                      </span>
-                      {[
-                        { key: "isim", label: "{isim}" },
-                        { key: "ad", label: "{ad}" },
-                        { key: "soyad", label: "{soyad}" },
-                        { key: "telefon", label: "{telefon}" },
-                        { key: "tarih", label: "{tarih}" },
-                        { key: "saat", label: "{saat}" },
-                      ].map((chip) => (
-                        <button
-                          key={chip.key}
-                          type="button"
-                          onClick={() => insertVariable(chip.key)}
-                          className="px-2 py-0.5 rounded-lg bg-[#111b21] hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono transition-all cursor-pointer"
-                        >
-                          {chip.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowWizard(false)}
-                      className="px-4 py-2 rounded-xl bg-gray-800 text-xs font-semibold text-gray-300 hover:bg-gray-700 cursor-pointer"
-                    >
-                      İptal
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!campaignTitle.trim() || !customMessage.trim()}
-                      onClick={() => setWizardStep(2)}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>İleri (Hedef Kitle)</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                {/* Dynamic Tag Buttons */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1.5 font-serif-title">
+                    Dinamik Etiketler (Kişiye Özel Alanlar):
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTags.map((t) => (
+                      <button
+                        key={t.tag}
+                        type="button"
+                        onClick={() => insertTag(t.tag)}
+                        className="px-2.5 py-1 rounded-lg bg-[#181c1f] hover:bg-[#202529] text-[#d4af37] border border-[#d4af37]/30 text-xs font-mono font-bold transition-all cursor-pointer"
+                      >
+                        + {t.tag}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
 
-              {/* STEP 2: Target Selection */}
-              {wizardStep === 2 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-gray-400">
-                      Gönderim Yapılacak Gruplar *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedGroups.length === groups.length) {
-                          setSelectedGroups([]);
-                        } else {
-                          setSelectedGroups(groups.map((g: any) => g.id));
-                        }
-                      }}
-                      className="text-[11px] text-emerald-400 hover:underline font-semibold cursor-pointer"
-                    >
-                      {selectedGroups.length === groups.length ? "Tümünü Kaldır" : "Tüm Grupları Seç"}
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
-                    {groups.length === 0 ? (
-                      <div className="text-xs text-gray-500 p-4 text-center bg-[#202c33] rounded-2xl">
-                        Henüz özel grup oluşturulmamış. Kişiler sekmesinden grup oluşturabilirsiniz.
-                      </div>
-                    ) : (
-                      groups.map((g: any) => {
-                        const isChecked = selectedGroups.includes(g.id);
-                        return (
-                          <label
-                            key={g.id}
-                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                              isChecked
-                                ? "bg-emerald-500/15 border-emerald-500/40 text-white"
-                                : "bg-[#202c33] border-gray-700 text-gray-300 hover:bg-[#2a3942]"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  if (isChecked) {
-                                    setSelectedGroups(selectedGroups.filter(id => id !== g.id));
-                                  } else {
-                                    setSelectedGroups([...selectedGroups, g.id]);
-                                  }
-                                }}
-                                className="w-4 h-4 accent-emerald-500"
-                              />
-                              <span className="text-xs font-bold">{g.name}</span>
-                            </div>
-                            <span className="text-[11px] text-gray-400">{g._count?.contacts || 0} Kişi</span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  <div className="flex justify-between gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setWizardStep(1)}
-                      className="px-4 py-2 rounded-xl bg-gray-800 text-xs font-semibold text-gray-300 cursor-pointer"
-                    >
-                      Geri
-                    </button>
-                    <button
-                      type="button"
-                      disabled={selectedGroups.length === 0}
-                      onClick={() => setWizardStep(3)}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>İleri (Anti-Ban Ayarları)</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                    Mesaj Metni *
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    placeholder="Merhaba {ad}, WhatsPulse özel mesajınız..."
+                    value={customMessage}
+                    onChange={(e) => setCustomMessage(e.target.value)}
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl p-3 text-xs text-white leading-relaxed focus:outline-none focus:border-[#d4af37]"
+                  />
                 </div>
-              )}
 
-              {/* STEP 3: Anti-Ban Delays & Batch Pause */}
-              {wizardStep === 3 && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-2.5">
-                    <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-xs text-gray-300 space-y-1">
-                      <p className="font-bold text-white">Akıllı Anti-Ban Gönderim Koruması</p>
-                      <p className="text-[11px] text-gray-400">
-                        WhatsApp spam filtrelerine takılmamak için mesajlar arasında rastgele insansı bekleme süresi ve parti aralarında soğuma molası verilir.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Min. Gecikme (sn)</label>
-                      <input
-                        type="number"
-                        min={3}
-                        value={minDelay}
-                        onChange={(e) => setMinDelay(Number(e.target.value))}
-                        className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Max. Gecikme (sn)</label>
-                      <input
-                        type="number"
-                        min={minDelay}
-                        value={maxDelay}
-                        onChange={(e) => setMaxDelay(Number(e.target.value))}
-                        className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Parti Büyüklüğü (Mesaj)</label>
-                      <input
-                        type="number"
-                        min={5}
-                        value={batchSize}
-                        onChange={(e) => setBatchSize(Number(e.target.value))}
-                        className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Parti Arası Mola (sn)</label>
-                      <input
-                        type="number"
-                        min={10}
-                        value={batchPause}
-                        onChange={(e) => setBatchPause(Number(e.target.value))}
-                        className="w-full bg-[#202c33] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between gap-2 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setWizardStep(2)}
-                      className="px-4 py-2 rounded-xl bg-gray-800 text-xs font-semibold text-gray-300 cursor-pointer"
-                    >
-                      Geri
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={launching}
-                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white shadow-lg flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 fill-white" />
-                      <span>{launching ? "Başlatılıyor..." : "Kampanyayı Kuyruğa Al & Başlat"}</span>
-                    </button>
-                  </div>
+                {/* Live Preview */}
+                <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#d4af37]/30 space-y-1">
+                  <span className="text-[10px] font-bold text-[#d4af37] uppercase font-serif-title">Canlı Önizleme</span>
+                  <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{previewMessage}</p>
                 </div>
-              )}
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Campaign Detail Modal */}
-      {showDetailModal && selectedCampaign && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#111b21] border border-gray-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-800">
-              <div>
-                <h3 className="text-base font-bold text-white">{selectedCampaign.title}</h3>
-                <p className="text-xs text-gray-400">Detaylı Mesaj Gönderim Kayıtları</p>
               </div>
+            )}
+
+            {/* Step 3: Anti-Spam & Gecikme */}
+            {wizardStep === 3 && (
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                <div className="p-3.5 rounded-2xl bg-[#121517] border border-[#10b981]/30 flex items-center gap-2.5 text-xs text-[#10b981]">
+                  <ShieldCheck className="w-5 h-5 text-[#10b981] shrink-0" />
+                  <span>
+                    WhatsApp algoritmasının spam korumasını aşmak için mesajlar arasında dinamik insansı bekleme uygulanır.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                      Minimum Gecikme (Saniye)
+                    </label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={60}
+                      value={minDelay}
+                      onChange={(e) => setMinDelay(Number(e.target.value))}
+                      className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                      Maksimum Gecikme (Saniye)
+                    </label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={120}
+                      value={maxDelay}
+                      onChange={(e) => setMaxDelay(Number(e.target.value))}
+                      className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                      Paket Boyutu (Her X mesajda bir mola)
+                    </label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={100}
+                      value={batchSize}
+                      onChange={(e) => setBatchSize(Number(e.target.value))}
+                      className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                      Paket Molası (Saniye)
+                    </label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={300}
+                      value={batchPause}
+                      onChange={(e) => setBatchPause(Number(e.target.value))}
+                      className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Özet ve Onay */}
+            {wizardStep === 4 && (
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#23292e] space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-[#23292e]">
+                    <span className="text-gray-400">Kampanya Adı:</span>
+                    <span className="font-bold text-white">{campaignTitle}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#23292e]">
+                    <span className="text-gray-400">Seçili Grup Sayısı:</span>
+                    <span className="font-bold text-[#d4af37] font-mono">{selectedGroups.length} Grup</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#23292e]">
+                    <span className="text-gray-400">Gecikme Aralığı:</span>
+                    <span className="font-mono text-[#10b981]">{minDelay} - {maxDelay} sn / mesaj</span>
+                  </div>
+                  <div className="pt-2">
+                    <span className="text-gray-400 block mb-1">Gönderilecek Mesaj:</span>
+                    <p className="p-3 rounded-xl bg-[#121517] text-gray-200 whitespace-pre-wrap">{customMessage}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Wizard Navigation Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-[#23292e]">
+              {wizardStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(wizardStep - 1)}
+                  className="px-4 py-2 rounded-xl bg-[#181c1f] text-xs font-semibold text-gray-300 hover:text-white cursor-pointer"
+                >
+                  ← Geri
+                </button>
+              ) : <div />}
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleCloneCampaign(selectedCampaign)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
+                  onClick={() => setShowWizard(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181c1f] text-xs font-semibold text-gray-300 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Düzenle ve Yeniden Başlat</span>
+                  İptal
                 </button>
-                <button
-                  onClick={() => setShowDetailModal(false)}
-                  className="text-gray-400 hover:text-white p-1"
-                >
-                  ✕
-                </button>
+                {wizardStep < 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (wizardStep === 1 && selectedGroups.length === 0) {
+                        alert("Lütfen en az bir hedef grup seçiniz.");
+                        return;
+                      }
+                      if (wizardStep === 2 && (!campaignTitle.trim() || !customMessage.trim())) {
+                        alert("Lütfen kampanya başlığı ve mesaj metnini doldurunuz.");
+                        return;
+                      }
+                      setWizardStep(wizardStep + 1);
+                    }}
+                    className="flex items-center gap-1 px-5 py-2 rounded-xl bg-[#d4af37] hover:bg-[#e5c158] text-black text-xs font-black shadow-lg cursor-pointer"
+                  >
+                    <span>İleri</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCreateAndLaunch}
+                    disabled={launching}
+                    className="flex items-center gap-1.5 px-6 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-xs font-black shadow-xl shadow-[#10b981]/20 cursor-pointer"
+                  >
+                    <Send className="w-4 h-4 text-black" />
+                    <span>{launching ? "Başlatılıyor..." : "🚀 Gönderimi Başlat"}</span>
+                  </button>
+                )}
               </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto py-4 space-y-2 custom-scrollbar">
-              {selectedCampaign.messages?.map((msg: any) => (
-                <div
-                  key={msg.id}
-                  className="p-3 rounded-xl bg-[#202c33]/50 border border-gray-800 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <div className="font-semibold text-white">{msg.phone}</div>
-                    <div className="text-[11px] text-gray-400 truncate max-w-md">{msg.content}</div>
-                  </div>
-                  <div className="text-right">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      msg.status === "SENT" || msg.status === "DELIVERED" || msg.status === "READ"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : msg.status === "FAILED"
-                        ? "bg-red-500/20 text-red-400"
-                        : "bg-amber-500/20 text-amber-400"
-                    }`}>
-                      {msg.status}
-                    </span>
-                    {msg.errorMessage && (
-                      <div className="text-[10px] text-red-400 mt-0.5">{msg.errorMessage}</div>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function CampaignsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-gray-400">Kampanya modülü yükleniyor...</div>}>
+      <CampaignsContent />
+    </Suspense>
   );
 }

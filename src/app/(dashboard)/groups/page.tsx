@@ -321,6 +321,15 @@ export default function GroupsPage() {
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/campaigns?groupId=${group.id}`}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#10b981]/15 hover:bg-[#10b981]/25 text-[#10b981] border border-[#10b981]/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                            title="Bu Gruba Toplu Mesaj Gönder"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">🚀 Toplu Mesaj Gönder</span>
+                          </Link>
+
                           <button
                             onClick={() => handleOpenEditGroup(group)}
                             className="p-1.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-[#d4af37] border border-[#2e353c] transition-all cursor-pointer"
