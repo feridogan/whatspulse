@@ -65,95 +65,106 @@ export async function POST(req: NextRequest) {
     // 1. Fetch Target Contacts & Group Members strictly
     let targetContacts: any[] = [];
 
-    const resolvedGroupIds = (Array.isArray(targetGroupIds) && targetGroupIds.length > 0)
-      ? targetGroupIds
-      : (Array.isArray(body.groupIds) && body.groupIds.length > 0)
-        ? body.groupIds
-        : (body.groupId ? [body.groupId] : []);
-
-    const resolvedContactIds = (Array.isArray(contactIds) && contactIds.length > 0)
-      ? contactIds
-      : (Array.isArray(body.targetContactIds) && body.targetContactIds.length > 0)
-        ? body.targetContactIds
-        : [];
-
-    if (resolvedGroupIds.length > 0) {
-      // 1a. Fetch from Contact table matching selected groups
-      const groupContacts = await prisma.contact.findMany({
-        where: {
-          groups: {
-            some: {
-              groupId: { in: resolvedGroupIds },
-            },
-          },
-          isBlacklisted: false,
-        },
-      });
-
-      // 1b. Fetch from Subscriber table matching selected groups
-      const groupSubscribers = await prisma.subscriber.findMany({
-        where: {
-          groups: {
-            some: {
-              groupId: { in: resolvedGroupIds },
-            },
-          },
-          isBlacklisted: false,
-          isActive: true,
-        },
-      });
-
-      const subscriberAsContacts = groupSubscribers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        phone: s.phone,
-        email: s.email,
-        customFields: s.customFields,
+    if (Array.isArray(body.recipients) && body.recipients.length > 0) {
+      // 1a. Direct confirmed recipient list from Pre-Dispatch Confirmation Modal
+      targetContacts = body.recipients.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        email: r.email,
+        customFields: r.customFields,
       }));
-
-      targetContacts = [...groupContacts, ...subscriberAsContacts];
-    } else if (resolvedContactIds.length > 0) {
-      const individualContacts = await prisma.contact.findMany({
-        where: {
-          id: { in: resolvedContactIds },
-          isBlacklisted: false,
-        },
-      });
-      const individualSubscribers = await prisma.subscriber.findMany({
-        where: {
-          id: { in: resolvedContactIds },
-          isBlacklisted: false,
-          isActive: true,
-        },
-      });
-      const subAsContacts = individualSubscribers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        phone: s.phone,
-        email: s.email,
-        customFields: s.customFields,
-      }));
-      targetContacts = [...individualContacts, ...subAsContacts];
-    } else if (body.sendToAll === true) {
-      // Explicitly requested send to all active contacts
-      const allContacts = await prisma.contact.findMany({
-        where: { isBlacklisted: false },
-      });
-      const allSubscribers = await prisma.subscriber.findMany({
-        where: { isBlacklisted: false, isActive: true },
-      });
-      const subAsContacts = allSubscribers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        phone: s.phone,
-        email: s.email,
-        customFields: s.customFields,
-      }));
-      targetContacts = [...allContacts, ...subAsContacts];
     } else {
-      return NextResponse.json({
-        error: 'Hedef grup seçilmedi. Lütfen mesaj göndermek istediğiniz grubu seçiniz.',
-      }, { status: 400 });
+      const resolvedGroupIds = (Array.isArray(targetGroupIds) && targetGroupIds.length > 0)
+        ? targetGroupIds
+        : (Array.isArray(body.groupIds) && body.groupIds.length > 0)
+          ? body.groupIds
+          : (body.groupId ? [body.groupId] : []);
+
+      const resolvedContactIds = (Array.isArray(contactIds) && contactIds.length > 0)
+        ? contactIds
+        : (Array.isArray(body.targetContactIds) && body.targetContactIds.length > 0)
+          ? body.targetContactIds
+          : [];
+
+      if (resolvedGroupIds.length > 0) {
+        // 1b. Fetch from Contact table matching selected groups
+        const groupContacts = await prisma.contact.findMany({
+          where: {
+            groups: {
+              some: {
+                groupId: { in: resolvedGroupIds },
+              },
+            },
+            isBlacklisted: false,
+          },
+        });
+
+        // 1c. Fetch from Subscriber table matching selected groups
+        const groupSubscribers = await prisma.subscriber.findMany({
+          where: {
+            groups: {
+              some: {
+                groupId: { in: resolvedGroupIds },
+              },
+            },
+            isBlacklisted: false,
+            isActive: true,
+          },
+        });
+
+        const subscriberAsContacts = groupSubscribers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          phone: s.phone,
+          email: s.email,
+          customFields: s.customFields,
+        }));
+
+        targetContacts = [...groupContacts, ...subscriberAsContacts];
+      } else if (resolvedContactIds.length > 0) {
+        const individualContacts = await prisma.contact.findMany({
+          where: {
+            id: { in: resolvedContactIds },
+            isBlacklisted: false,
+          },
+        });
+        const individualSubscribers = await prisma.subscriber.findMany({
+          where: {
+            id: { in: resolvedContactIds },
+            isBlacklisted: false,
+            isActive: true,
+          },
+        });
+        const subAsContacts = individualSubscribers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          phone: s.phone,
+          email: s.email,
+          customFields: s.customFields,
+        }));
+        targetContacts = [...individualContacts, ...subAsContacts];
+      } else if (body.sendToAll === true) {
+        // Explicitly requested send to all active contacts
+        const allContacts = await prisma.contact.findMany({
+          where: { isBlacklisted: false },
+        });
+        const allSubscribers = await prisma.subscriber.findMany({
+          where: { isBlacklisted: false, isActive: true },
+        });
+        const subAsContacts = allSubscribers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          phone: s.phone,
+          email: s.email,
+          customFields: s.customFields,
+        }));
+        targetContacts = [...allContacts, ...subAsContacts];
+      } else {
+        return NextResponse.json({
+          error: 'Hedef grup seçilmedi. Lütfen mesaj göndermek istediğiniz grubu seçiniz.',
+        }, { status: 400 });
+      }
     }
 
     // Deduplicate by phone

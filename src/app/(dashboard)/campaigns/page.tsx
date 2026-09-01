@@ -28,6 +28,7 @@ import {
   FolderTree
 } from "lucide-react";
 import { replacePlaceholders } from "@/lib/utils";
+import { SendConfirmationModal, RecipientItem } from "@/components/modals/SendConfirmationModal";
 
 function CampaignsContent() {
   const searchParams = useSearchParams();
@@ -39,6 +40,12 @@ function CampaignsContent() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+
+  // Confirmation & Pre-Dispatch Modal State
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [previewRecipients, setPreviewRecipients] = useState<RecipientItem[]>([]);
+  const [previewGroupNames, setPreviewGroupNames] = useState<string[]>([]);
+  const [fetchingPreview, setFetchingPreview] = useState(false);
 
   // Wizard State
   const [wizardStep, setWizardStep] = useState(1);
@@ -142,7 +149,7 @@ function CampaignsContent() {
     }
   };
 
-  const handleCreateAndLaunch = async () => {
+  const handleOpenPreDispatchModal = async () => {
     if (!campaignTitle.trim()) {
       alert("Lütfen kampanya başlığı giriniz.");
       return;
@@ -157,6 +164,44 @@ function CampaignsContent() {
     }
 
     try {
+      setFetchingPreview(true);
+      const res = await fetch("/api/campaigns/preview-recipients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupIds: selectedGroups,
+          targetGroupIds: selectedGroups,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Alıcı listesi yüklenemedi.");
+        return;
+      }
+
+      if (!data.recipients || data.recipients.length === 0) {
+        alert("Seçilen grupta aktif alıcı bulunamadı.");
+        return;
+      }
+
+      setPreviewRecipients(data.recipients);
+      setPreviewGroupNames(data.groupNames || ["Seçili Gruplar"]);
+      setShowConfirmModal(true);
+    } catch (err: any) {
+      alert("Alıcı listesi doğrulanırken hata oluştu: " + err.message);
+    } finally {
+      setFetchingPreview(false);
+    }
+  };
+
+  const handleFinalDispatch = async (confirmedRecipients: RecipientItem[]) => {
+    if (!confirmedRecipients || confirmedRecipients.length === 0) {
+      alert("Lütfen en az bir alıcı onaylayınız.");
+      return;
+    }
+
+    try {
       setLaunching(true);
       const res = await fetch("/api/campaigns", {
         method: "POST",
@@ -165,6 +210,7 @@ function CampaignsContent() {
           title: campaignTitle,
           templateId: selectedTemplateId || null,
           customContent: customMessage,
+          recipients: confirmedRecipients,
           groupIds: selectedGroups,
           targetGroupIds: selectedGroups,
           minDelay: Number(minDelay),
@@ -176,6 +222,7 @@ function CampaignsContent() {
 
       const data = await res.json();
       if (res.ok) {
+        setShowConfirmModal(false);
         setShowWizard(false);
         setWizardStep(1);
         setCampaignTitle("");
@@ -701,12 +748,12 @@ function CampaignsContent() {
                 ) : (
                   <button
                     type="button"
-                    onClick={handleCreateAndLaunch}
-                    disabled={launching}
-                    className="flex items-center gap-1.5 px-6 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-xs font-black shadow-xl shadow-[#10b981]/20 cursor-pointer"
+                    onClick={handleOpenPreDispatchModal}
+                    disabled={fetchingPreview || launching}
+                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f39c12] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-xs font-black shadow-xl shadow-[#10b981]/20 cursor-pointer transition-all transform active:scale-95 disabled:opacity-50"
                   >
                     <Send className="w-4 h-4 text-black" />
-                    <span>{launching ? "Başlatılıyor..." : "🚀 Gönderimi Başlat"}</span>
+                    <span>{fetchingPreview ? "Alıcılar Doğrulanıyor..." : "🚀 Alıcıları Doğrula & Gönder"}</span>
                   </button>
                 )}
               </div>
@@ -714,6 +761,20 @@ function CampaignsContent() {
           </div>
         </div>
       )}
+
+      {/* Son Doğrulama ve Alıcı Onay Modalı */}
+      <SendConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        campaignTitle={campaignTitle}
+        messageText={customMessage}
+        groupNames={previewGroupNames}
+        initialRecipients={previewRecipients}
+        minDelay={minDelay}
+        maxDelay={maxDelay}
+        onConfirm={handleFinalDispatch}
+        isLaunching={launching}
+      />
     </div>
   );
 }
