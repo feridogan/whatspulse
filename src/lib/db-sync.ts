@@ -120,6 +120,34 @@ export async function ensureDbSchemaSync() {
           "value" JSONB NOT NULL,
           "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- 8. Create SpecialDay table if not exists
+        CREATE TABLE IF NOT EXISTS "SpecialDay" (
+          "id" TEXT PRIMARY KEY,
+          "title" TEXT NOT NULL,
+          "hijriDate" TEXT,
+          "miladiDate" TIMESTAMP(3) NOT NULL,
+          "targetGroup" TEXT DEFAULT 'Tüm Aboneler',
+          "status" TEXT NOT NULL DEFAULT 'PLANLANDI',
+          "content" TEXT NOT NULL,
+          "hasAudio" BOOLEAN NOT NULL DEFAULT false,
+          "audioUrl" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 9. Create Hadith table if not exists
+        CREATE TABLE IF NOT EXISTS "Hadith" (
+          "id" TEXT PRIMARY KEY,
+          "arabic" TEXT NOT NULL,
+          "turkish" TEXT NOT NULL,
+          "source" TEXT,
+          "category" TEXT DEFAULT 'Genel Hikmet',
+          "tags" JSONB DEFAULT '[]'::jsonb,
+          "audioUrl" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
       END $$;
     `);
 
