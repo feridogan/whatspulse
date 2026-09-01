@@ -215,10 +215,31 @@ export async function POST(req: NextRequest) {
 
       const personalizedContent = replacePlaceholders(baseContent, contactData);
 
+      // Verify contactId existence in Contact table to prevent foreign key error
+      let validContactId: string | null = null;
+      if (contact.id) {
+        const contactExists = await prisma.contact.findUnique({
+          where: { id: contact.id },
+          select: { id: true },
+        });
+        if (contactExists) {
+          validContactId = contactExists.id;
+        }
+      }
+      if (!validContactId && contact.phone) {
+        const contactByPhone = await prisma.contact.findUnique({
+          where: { phone: contact.phone },
+          select: { id: true },
+        });
+        if (contactByPhone) {
+          validContactId = contactByPhone.id;
+        }
+      }
+
       const messageRecord = await prisma.message.create({
         data: {
           campaignId: campaign.id,
-          contactId: contact.id,
+          contactId: validContactId,
           phone: contact.phone,
           content: personalizedContent,
           mediaUrl: finalMediaUrl,
@@ -237,7 +258,7 @@ export async function POST(req: NextRequest) {
           content: personalizedContent,
           mediaUrl: finalMediaUrl || undefined,
           mediaType: finalMediaType as any,
-          contactId: contact.id,
+          contactId: validContactId || undefined,
           minDelay: campaign.minDelay,
           maxDelay: campaign.maxDelay,
           batchSize: campaign.batchSize,
