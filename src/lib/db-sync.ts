@@ -136,18 +136,8 @@ export async function ensureDbSchemaSync() {
           "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- 9. Create Hadith table if not exists
-        CREATE TABLE IF NOT EXISTS "Hadith" (
-          "id" TEXT PRIMARY KEY,
-          "arabic" TEXT NOT NULL,
-          "turkish" TEXT NOT NULL,
-          "source" TEXT,
-          "category" TEXT DEFAULT 'Genel Hikmet',
-          "tags" JSONB DEFAULT '[]'::jsonb,
-          "audioUrl" TEXT,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
+        -- 9. Clean up legacy default seed groups if they exist
+        DELETE FROM "Group" WHERE "name" IN ('Tüm Müşteriler', 'VIP Müşteriler', 'Potansiyel Müşteriler', 'Personel / Ekip');
       END $$;
     `);
 

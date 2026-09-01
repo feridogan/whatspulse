@@ -17,7 +17,7 @@ async function main() {
     const admin = await prisma.user.create({
       data: {
         email: adminEmail,
-        name: 'Sistem Yöneticisi',
+        name: 'Sedat Bayraklı',
         password: hashedPassword,
         role: Role.ADMIN,
         isActive: true,
@@ -26,28 +26,6 @@ async function main() {
     console.log(`✅ Admin user created: ${admin.email} (Password: Admin123!)`);
   } else {
     console.log(`ℹ️ Admin user already exists: ${existingAdmin.email}`);
-  }
-
-  // 1.1 Seed Standard User
-  const userEmail = 'user@whatspulse.com';
-  const existingUser = await prisma.user.findUnique({
-    where: { email: userEmail },
-  });
-
-  if (!existingUser) {
-    const hashedPassword = await bcrypt.hash('User123!', 10);
-    const user = await prisma.user.create({
-      data: {
-        email: userEmail,
-        name: 'Standart Kullanıcı',
-        password: hashedPassword,
-        role: Role.USER,
-        isActive: true,
-      },
-    });
-    console.log(`✅ Standard user created: ${user.email} (Password: User123!)`);
-  } else {
-    console.log(`ℹ️ Standard user already exists: ${existingUser.email}`);
   }
 
   // 2. Seed Default Settings (Evolution API & Anti-Ban)
@@ -85,61 +63,9 @@ async function main() {
     console.log(`✅ Setting synced: ${s.key}`);
   }
 
-  // 3. Seed Default Contact Groups
-  const defaultGroups = [
-    { name: 'Tüm Müşteriler', description: 'Kayıtlı aktif müşteri listesi', color: '#10b981' },
-    { name: 'VIP Müşteriler', description: 'Özel teklif ve indirim grubu', color: '#8b5cf6' },
-    { name: 'Potansiyel Müşteriler', description: 'Henüz satın alım yapmamış adaylar', color: '#f59e0b' },
-    { name: 'Personel / Ekip', description: 'Dahili kurumsal iletişim grubu', color: '#3b82f6' },
-  ];
+  // Note: Groups table starts completely empty (0 groups). No auto-groups seeded.
 
-  for (const group of defaultGroups) {
-    await prisma.group.upsert({
-      where: { name: group.name },
-      update: {},
-      create: group,
-    });
-  }
-  console.log('✅ Default contact groups created');
-
-  // 4. Seed Default WhatsApp Templates
-  const defaultTemplates = [
-    {
-      name: 'Hoşgeldiniz & Tanışma',
-      content: 'Merhaba {isim}, WhatsPulse ailesine hoş geldiniz! 🎉 Size özel fırsatlardan haberdar olmak için bu mesajı kaydedebilirsiniz. İptal için IPTAL yazabilirsiniz.',
-      mediaType: 'text',
-      variables: ['isim'],
-    },
-    {
-      name: 'Randevu & Hatırlatma',
-      content: 'Sayın {isim}, {tarih} günü saat {saat} için planlanan randevunuzu hatırlatmak isteriz. Bir değişiklik durumunda lütfen bize bu hattan bilgi veriniz.',
-      mediaType: 'text',
-      variables: ['isim', 'tarih', 'saat'],
-    },
-    {
-      name: 'Sipariş & Kargo Bilgilendirme',
-      content: 'Sayın {isim}, siparişiniz kargoya verilmiştir! 📦 Takip No: {takip_no}. Bizi tercih ettiğiniz için teşekkür ederiz.',
-      mediaType: 'text',
-      variables: ['isim', 'takip_no'],
-    },
-    {
-      name: 'Özel Kampanya & İndirim (Görselli)',
-      content: 'Fırsat Başladı! 🔥 Sayın {isim}, bu haftaya özel tüm ürünlerde geçerli %20 indirim kodunuz: PULSE20. Detaylı bilgi için hemen yanıtlayın!\n\nİptal için IPTAL yazınız.',
-      mediaType: 'image',
-      mediaUrl: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&auto=format&fit=crop&q=80',
-      variables: ['isim'],
-    },
-  ];
-
-  for (const t of defaultTemplates) {
-    const existing = await prisma.template.findFirst({ where: { name: t.name } });
-    if (!existing) {
-      await prisma.template.create({ data: t });
-    }
-  }
-  console.log('✅ Ready-to-use WhatsApp templates created');
-
-  console.log('🎉 Database seeding completed successfully!');
+  console.log('🎉 Database seeding completed successfully (Groups: 0)!');
 }
 
 main()

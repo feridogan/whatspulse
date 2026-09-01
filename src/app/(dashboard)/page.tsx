@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { 
   Users, 
@@ -15,59 +15,59 @@ import {
   RefreshCw, 
   Plus, 
   ArrowRight,
-  Sparkles,
-  Volume2,
   FolderTree,
   Activity,
-  Zap
+  Zap,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>({
-    totalSubscribers: 1859,
-    activeSubscribers: 1857,
-    interactiveSubscribers: 694,
-    totalDelivered: 373,
-    todayDelivered: 4,
-    totalFailed: 2,
-    successRate: 99.47,
-    whatsappConnected: true,
-    whatsappState: "BAĞLI (AÇIK)",
+    totalSubscribers: 0,
+    activeSubscribers: 0,
+    interactiveSubscribers: 0,
+    totalDelivered: 0,
+    todayDelivered: 0,
+    totalFailed: 0,
+    successRate: 100,
+    whatsappConnected: false,
+    whatsappState: "KONTROL EDİLİYOR...",
     spamRisk: "DÜŞÜK (GÜVENLİ)",
   });
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/dashboard/stats");
       const data = await res.json();
       if (data.success && data.stats) {
         setStats({
-          ...stats,
-          totalSubscribers: data.stats.totalSubscribers || 1859,
-          activeSubscribers: data.stats.activeSubscribers || 1857,
-          interactiveSubscribers: data.stats.interactiveSubscribers || 694,
-          totalDelivered: data.stats.totalDelivered || 373,
-          totalFailed: data.stats.totalFailed || 0,
-          successRate: data.stats.successRate || 99.47,
-          whatsappConnected: data.stats.whatsappConnected,
-          whatsappState: data.stats.whatsappConnected ? "BAĞLI (AÇIK)" : "KOPUK",
-          spamRisk: "DÜŞÜK (GÜVENLİ)",
+          totalSubscribers: data.stats.totalSubscribers ?? 0,
+          activeSubscribers: data.stats.activeSubscribers ?? 0,
+          interactiveSubscribers: data.stats.interactiveSubscribers ?? 0,
+          totalDelivered: data.stats.totalDelivered ?? 0,
+          todayDelivered: data.stats.todayDelivered ?? 0,
+          totalFailed: data.stats.totalFailed ?? 0,
+          successRate: data.stats.successRate ?? 100,
+          whatsappConnected: data.stats.whatsappConnected ?? false,
+          whatsappState: data.stats.whatsappState ?? "KAPALI",
+          spamRisk: data.stats.spamRisk ?? "DÜŞÜK (GÜVENLİ)",
         });
       }
     } catch (err) {
-      console.error(err);
+      console.error("Dashboard stats fetch error:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 15000);
+    const interval = setInterval(fetchStats, 10000); // 10s auto-refresh polling
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStats]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -79,15 +79,20 @@ export default function DashboardPage() {
               <Activity className="w-3 h-3 text-[#d4af37]" />
               WhatsPulse PRO Panel
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#10b981]/15 text-[#10b981] text-[11px] font-bold border border-[#10b981]/30">
-              WhatsApp Evolution API (ff) Aktif
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1 ${
+              stats.whatsappConnected
+                ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+            }`}>
+              {stats.whatsappConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              <span>Evolution API (ff): {stats.whatsappState}</span>
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide font-serif-title">
             WhatsApp SaaS & Toplu Mesaj Yönetim Merkezi
           </h1>
           <p className="text-xs text-gray-400 max-w-2xl">
-            Abonelerinize ve müşteri gruplarınıza WhatsApp, Sesli Mesaj (AI TTS) ve özel gün tebriklerini planlı veya anlık olarak ulaştırın.
+            Abonelerinize ve müşteri gruplarınıza WhatsApp bildirimlerini ve özel gün tebriklerini planlı veya anlık olarak ulaştırın.
           </p>
         </div>
 
@@ -109,7 +114,7 @@ export default function DashboardPage() {
           </Link>
           <button
             onClick={fetchStats}
-            title="Verileri Yenile"
+            title="Verileri Yenile (10s Polling)"
             className="p-2.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-[#d4af37]" : ""}`} />
@@ -117,7 +122,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 7 Statistics Cards Grid */}
+      {/* 7 Statistics Cards Grid (Canlı Veritabanı Metrikleri) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. TOPLAM ABONE */}
         <div className="p-5 rounded-3xl bg-[#121517] border border-[#23292e] hover:border-[#d4af37]/40 transition-all shadow-xl group">
@@ -154,7 +159,7 @@ export default function DashboardPage() {
               {stats.interactiveSubscribers.toLocaleString("tr-TR")}
             </div>
             <div className="text-[11px] font-semibold text-gray-400 mt-1">
-              692 Aktif Etkileşimli
+              Aktif Etkileşimli
             </div>
           </div>
         </div>
@@ -174,7 +179,7 @@ export default function DashboardPage() {
               {stats.totalDelivered.toLocaleString("tr-TR")}
             </div>
             <div className="text-[11px] font-semibold text-blue-400 mt-1">
-              Bugün: {stats.todayDelivered || 4}
+              Bugün: {stats.todayDelivered}
             </div>
           </div>
         </div>
@@ -211,7 +216,7 @@ export default function DashboardPage() {
             <div className="text-2xl font-black text-white font-mono mt-1">
               %{stats.successRate}
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Genel Teslimat Kalitesi</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Gerçek Teslimat Oranı</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
             <TrendingUp className="w-6 h-6" />
@@ -219,17 +224,25 @@ export default function DashboardPage() {
         </div>
 
         {/* 6. WHATSAPP HATTI */}
-        <div className="p-5 rounded-3xl bg-[#121517] border border-[#10b981]/25 shadow-xl flex items-center justify-between">
+        <div className={`p-5 rounded-3xl bg-[#121517] border shadow-xl flex items-center justify-between transition-colors ${
+          stats.whatsappConnected ? "border-[#10b981]/25" : "border-rose-500/25"
+        }`}>
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-gray-400 font-serif-title">
               WHATSAPP HATTI (ff)
             </span>
-            <div className="text-lg font-black text-[#10b981] font-mono mt-1">
+            <div className={`text-lg font-black font-mono mt-1 ${
+              stats.whatsappConnected ? "text-[#10b981]" : "text-rose-400"
+            }`}>
               {stats.whatsappState}
             </div>
             <p className="text-[11px] text-gray-400 mt-0.5">Evolution API Instance: ff</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
+          <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${
+            stats.whatsappConnected 
+              ? "bg-[#10b981]/10 border-[#10b981]/30 text-[#10b981]" 
+              : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+          }`}>
             <Send className="w-6 h-6" />
           </div>
         </div>
@@ -243,7 +256,7 @@ export default function DashboardPage() {
             <div className="text-lg font-black text-[#10b981] font-mono mt-1">
               {stats.spamRisk}
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Son 10 Gönderim (0 Hata)</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Son Gönderim Güvenlik Analizi</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
             <ShieldCheck className="w-6 h-6" />
@@ -313,7 +326,7 @@ export default function DashboardPage() {
           </div>
           <div className="mt-4">
             <h3 className="text-sm font-bold text-white font-serif-title">Sistem & API Ayarları</h3>
-            <p className="text-[11px] text-gray-400 mt-0.5">Evolution API (ff), TTS ve Sessiz Saatler.</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Evolution API (ff), Webhook ve Sessiz Saatler.</p>
           </div>
         </Link>
       </div>

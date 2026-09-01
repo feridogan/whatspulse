@@ -3,72 +3,113 @@ import prisma from "@/lib/prisma";
 import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { EvolutionService } from "@/lib/evolution";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     await ensureDbSchemaSync();
 
-    let totalSubscribers = await prisma.subscriber.count().catch(() => 0);
-    let activeSubscribers = await prisma.subscriber.count({ where: { isActive: true } }).catch(() => 0);
-    let interactiveSubscribers = await prisma.subscriber.count({ where: { isInteractive: true } }).catch(() => 0);
+    // 1. TOPLAM ABONE & AKTİF ABONE
+    const [
+      totalSubscribers,
+      activeSubscribers,
+      totalContacts,
+      activeContacts
+    ] = await Promise.all([
+      prisma.subscriber.count().catch(() => 0),
+      prisma.subscriber.count({ where: { isBlacklisted: false, isActive: true } }).catch(() => 0),
+      prisma.contact.count().catch(() => 0),
+      prisma.contact.count({ where: { isBlacklisted: false } }).catch(() => 0)
+    ]);
 
-    if (totalSubscribers === 0) {
-      const contactCount = await prisma.contact.count().catch(() => 0);
-      if (contactCount > 0) {
-        totalSubscribers = contactCount;
-        activeSubscribers = contactCount;
-        interactiveSubscribers = Math.min(contactCount, 32);
-      }
-    }
+    const finalTotalSubscribers = Math.max(totalSubscribers, totalContacts);
+    const finalActiveSubscribers = Math.max(activeSubscribers, activeContacts);
 
-    const totalDelivered = await prisma.message.count({
-      where: { status: { in: ["SENT", "DELIVERED", "READ"] } }
-    }).catch(() => 0);
+    // 2. ETKİLEŞİMLİ ABONE
+    const [interactiveSubscribers, interactiveContacts] = await Promise.all([
+      prisma.subscriber.count({ where: { isInteractive: true } }).catch(() => 0),
+      prisma.contact.count({
+        where: {
+          messages: {
+            some: {
+              status: { in: ["SENT", "DELIVERED", "READ"] }
+            }
+          }
+        }
+      }).catch(() => 0)
+    ]);
 
-    const totalFailed = await prisma.message.count({
-      where: { status: "FAILED" }
-    }).catch(() => 0);
+    const finalInteractiveSubscribers = Math.max(interactiveSubscribers, interactiveContacts);
 
+    // 3. İLETİLEN MESAJ & BUGÜN
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [
+      sentMessages,
+      sentNotifications,
+      todaySentMessages,
+      todaySentNotifications
+    ] = await Promise.all([
+      prisma.message.count({ where: { status: { in: ["SENT", "DELIVERED", "READ"] } } }).catch(() => 0),
+      prisma.notificationLog.count({ where: { status: { in: ["SENT", "DELIVERED"] } } }).catch(() => 0),
+      prisma.message.count({ where: { status: { in: ["SENT", "DELIVERED", "READ"] }, createdAt: { gte: startOfDay } } }).catch(() => 0),
+      prisma.notificationLog.count({ where: { status: { in: ["SENT", "DELIVERED"] }, createdAt: { gte: startOfDay } } }).catch(() => 0)
+    ]);
+
+    const totalDelivered = sentMessages + sentNotifications;
+    const todayDelivered = todaySentMessages + todaySentNotifications;
+
+    // 4. BAŞARISIZ MESAJ
+    const [failedMessages, failedNotifications] = await Promise.all([
+      prisma.message.count({ where: { status: "FAILED" } }).catch(() => 0),
+      prisma.notificationLog.count({ where: { status: "FAILED" } }).catch(() => 0)
+    ]);
+
+    const totalFailed = failedMessages + failedNotifications;
+
+    // 5. BAŞARI ORANI
     const totalProcessed = totalDelivered + totalFailed;
-    const successRate = totalProcessed > 0 ? ((totalDelivered / totalProcessed) * 100).toFixed(1) : "99.8";
+    const successRate = totalProcessed > 0
+      ? ((totalDelivered / totalProcessed) * 100).toFixed(2)
+      : "100.00";
 
-    const evoState = await EvolutionService.getConnectionState().catch(() => ({
+    // 6. WHATSAPP HATTI (ff)
+    const evoState = await EvolutionService.getConnectionState("ff").catch(() => ({
       isOpen: false,
       state: "close"
     }));
 
-    const totalDomains = await prisma.domain.count().catch(() => 0);
-    const now = new Date();
-    const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const isConnected = evoState.isOpen || evoState.state === "open" || evoState.state === "CONNECTED";
 
-    const expiringDomains = await prisma.domain.findMany({
+    // 7. SPAM & HAT RİSKİ
+    const recentFailedCount = await prisma.message.count({
       where: {
-        expiryDate: {
-          lte: thirtyDaysLater,
-        }
-      },
-      include: {
-        subscriber: true
-      },
-      orderBy: { expiryDate: "asc" },
-      take: 10
-    }).catch(() => []);
+        status: "FAILED",
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      }
+    }).catch(() => 0);
+
+    const spamRisk = recentFailedCount === 0
+      ? "DÜŞÜK (GÜVENLİ)"
+      : recentFailedCount <= 3
+      ? "ORTA (DİKKAT)"
+      : "YÜKSEK (RİSKLİ)";
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalSubscribers,
-        activeSubscribers,
-        interactiveSubscribers,
-        totalDelivered: totalDelivered || 420,
-        totalFailed: totalFailed || 0,
-        successRate: parseFloat(successRate) || 99.8,
-        whatsappConnected: evoState.isOpen,
-        whatsappState: evoState.isOpen ? "BAĞLI (AÇIK)" : "KOPUK",
-        spamRisk: "DÜŞÜK (GÜVENLİ)",
-        totalDomains,
-        expiringCount: expiringDomains.length,
-      },
-      expiringDomains,
+        totalSubscribers: finalTotalSubscribers,
+        activeSubscribers: finalActiveSubscribers,
+        interactiveSubscribers: finalInteractiveSubscribers,
+        totalDelivered,
+        todayDelivered,
+        totalFailed,
+        successRate: parseFloat(successRate),
+        whatsappConnected: isConnected,
+        whatsappState: isConnected ? "BAĞLI (AÇIK)" : "KAPALI",
+        spamRisk,
+      }
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
