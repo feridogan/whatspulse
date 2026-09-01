@@ -294,7 +294,7 @@ export default function GroupsPage() {
               </thead>
               <tbody className="divide-y divide-[#23292e]/60 font-sans">
                 {groups.map((group) => {
-                  const count = group._count?.subscribers || group._count?.contacts || 0;
+                  const count = group.memberCount ?? group.contacts?.length ?? group.subscribers?.length ?? group._count?.contacts ?? group._count?.subscribers ?? 0;
                   return (
                     <tr key={group.id} className="hover:bg-[#161a1d]/60 transition-colors">
                       <td className="py-3.5 px-4">
