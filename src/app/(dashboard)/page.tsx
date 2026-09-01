@@ -10,7 +10,6 @@ import {
   TrendingUp, 
   Send, 
   ShieldCheck, 
-  BookOpen, 
   Calendar, 
   Clock, 
   RefreshCw, 
@@ -18,7 +17,9 @@ import {
   ArrowRight,
   Sparkles,
   Volume2,
-  FolderTree
+  FolderTree,
+  Activity,
+  Zap
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -70,23 +71,23 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Top Banner: Hikmetnâme Kurumsal Karşılama */}
+      {/* Top Banner: WhatsPulse Kurumsal Karşılama */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#14181b] via-[#121517] to-[#0e1113] border border-[#d4af37]/25 shadow-2xl">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-[11px] font-extrabold border border-[#d4af37]/30 flex items-center gap-1 font-serif-title">
-              <Sparkles className="w-3 h-3 text-[#d4af37]" />
-              Hikmetnâme Kurumsal Panel
+              <Activity className="w-3 h-3 text-[#d4af37]" />
+              WhatsPulse PRO Panel
             </span>
             <span className="px-2.5 py-0.5 rounded-full bg-[#10b981]/15 text-[#10b981] text-[11px] font-bold border border-[#10b981]/30">
-              WhatsApp Otomasyonu Aktif
+              WhatsApp Evolution API (ff) Aktif
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide font-serif-title">
-            Günün İletişim & Hadis/Ayet Yayın Merkezi
+            WhatsApp SaaS & Toplu Mesaj Yönetim Merkezi
           </h1>
           <p className="text-xs text-gray-400 max-w-2xl">
-            Abonelerinize günlük ayet, hadis, sesli mesaj (AI TTS) ve özel gün tebriklerini planlı veya anlık olarak ulaştırın.
+            Abonelerinize ve müşteri gruplarınıza WhatsApp, Sesli Mesaj (AI TTS) ve özel gün tebriklerini planlı veya anlık olarak ulaştırın.
           </p>
         </div>
 
@@ -116,7 +117,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 7 Statistics Cards Grid (Section 3) */}
+      {/* 7 Statistics Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. TOPLAM ABONE */}
         <div className="p-5 rounded-3xl bg-[#121517] border border-[#23292e] hover:border-[#d4af37]/40 transition-all shadow-xl group">
@@ -210,7 +211,7 @@ export default function DashboardPage() {
             <div className="text-2xl font-black text-white font-mono mt-1">
               %{stats.successRate}
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Genel Teslimat</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Genel Teslimat Kalitesi</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
             <TrendingUp className="w-6 h-6" />
@@ -221,12 +222,12 @@ export default function DashboardPage() {
         <div className="p-5 rounded-3xl bg-[#121517] border border-[#10b981]/25 shadow-xl flex items-center justify-between">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-gray-400 font-serif-title">
-              WHATSAPP HATTI
+              WHATSAPP HATTI (ff)
             </span>
             <div className="text-lg font-black text-[#10b981] font-mono mt-1">
               {stats.whatsappState}
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Evolution API Durumu</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Evolution API Instance: ff</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
             <Send className="w-6 h-6" />
@@ -250,98 +251,71 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Günün Ayeti & Hadis Kartı + Hızlı Gönderim */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Daily Verse / Hadith Featured Panel */}
-        <div className="lg:col-span-2 p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
-            <div className="flex items-center gap-2 text-[#d4af37]">
-              <BookOpen className="w-5 h-5" />
-              <h2 className="text-sm font-bold uppercase tracking-wider font-serif-title">
-                Günün Ayet & Hikmet Paylaşımı
-              </h2>
+      {/* WhatsPulse Hızlı Yönetim Panelleri */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link
+          href="/subscribers"
+          className="p-5 rounded-3xl bg-[#121517] hover:bg-[#161a1d] border border-[#23292e] hover:border-[#d4af37]/40 flex flex-col justify-between transition-all group cursor-pointer shadow-xl"
+        >
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37]">
+              <Users className="w-5 h-5" />
             </div>
-            <span className="text-[11px] font-mono text-[#d4af37] bg-[#d4af37]/10 px-2.5 py-0.5 rounded-full border border-[#d4af37]/20">
-              Otomatik Saat: 08:00
-            </span>
+            <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-[#d4af37] transition-transform group-hover:translate-x-1" />
           </div>
-
-          <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2.5">
-            <div className="text-sm font-serif text-right text-[#d4af37] leading-relaxed font-semibold">
-              بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ • وَقُلْ رَبِّ زِدْن۪ي عِلْمًا
-            </div>
-            <div className="text-xs text-gray-200 leading-relaxed">
-              <strong>Meal:</strong> "De ki: Rabbim, benim ilmimi artır." <em>(Tâhâ Suresi, 114. Ayet)</em>
-            </div>
-            <div className="text-[11px] text-gray-400 border-t border-[#2e353c] pt-2 flex items-center justify-between">
-              <span>Seslendirme Motoru: <strong>Edge AI Neural (Ahmet)</strong></span>
-              <span className="text-[#10b981] font-bold">✓ Ses Dosyası Hazır</span>
-            </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-bold text-white font-serif-title">Abone Rehberi</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Kişi listesi, VCF yükleme ve tercihler.</p>
           </div>
+        </Link>
 
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">Hedef Kitle:</span>
-              <span className="px-2 py-0.5 rounded-lg bg-[#181c1f] text-gray-300 border border-[#2e353c] text-xs font-semibold">
-                Tüm Aktif Aboneler (1857 Kişi)
-              </span>
+        <Link
+          href="/groups"
+          className="p-5 rounded-3xl bg-[#121517] hover:bg-[#161a1d] border border-[#23292e] hover:border-[#10b981]/40 flex flex-col justify-between transition-all group cursor-pointer shadow-xl"
+        >
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981]">
+              <FolderTree className="w-5 h-5" />
             </div>
-            <Link
-              href="/chat"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Şimdi Yayınla</span>
-            </Link>
+            <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-[#10b981] transition-transform group-hover:translate-x-1" />
           </div>
-        </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-bold text-white font-serif-title">Çift Pencereli Gruplar</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Sürükle bırak ve tek tıkla üye atama.</p>
+          </div>
+        </Link>
 
-        {/* Quick Access Modules */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-3 flex flex-col justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-serif-title pb-2 border-b border-[#23292e]">
-              Hızlı Yönetim Panelleri
-            </h2>
-            <div className="space-y-2 mt-3">
-              <Link
-                href="/subscribers"
-                className="p-3 rounded-2xl bg-[#161a1d] hover:bg-[#1e2327] border border-[#2e353c] hover:border-[#d4af37]/40 flex items-center justify-between transition-all group cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Users className="w-4 h-4 text-[#d4af37]" />
-                  <span className="text-xs font-semibold text-gray-200">Abone Rehberi</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-[#d4af37]" />
-              </Link>
-
-              <Link
-                href="/groups"
-                className="p-3 rounded-2xl bg-[#161a1d] hover:bg-[#1e2327] border border-[#2e353c] hover:border-[#10b981]/40 flex items-center justify-between transition-all group cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <FolderTree className="w-4 h-4 text-[#10b981]" />
-                  <span className="text-xs font-semibold text-gray-200">Çift Pencereli Gruplar</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-[#10b981]" />
-              </Link>
-
-              <Link
-                href="/special-days"
-                className="p-3 rounded-2xl bg-[#161a1d] hover:bg-[#1e2327] border border-[#2e353c] hover:border-blue-400/40 flex items-center justify-between transition-all group cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Calendar className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-semibold text-gray-200">Özel Gün & Kandil Takvimi</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-blue-400" />
-              </Link>
+        <Link
+          href="/chat"
+          className="p-5 rounded-3xl bg-[#121517] hover:bg-[#161a1d] border border-[#23292e] hover:border-blue-500/40 flex flex-col justify-between transition-all group cursor-pointer shadow-xl"
+        >
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <MessageSquare className="w-5 h-5" />
             </div>
+            <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-blue-400 transition-transform group-hover:translate-x-1" />
           </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-bold text-white font-serif-title">Canlı WhatsApp Sohbeti</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Gelen ve giden mesajları anlık yönetin.</p>
+          </div>
+        </Link>
 
-          <div className="p-3 rounded-2xl bg-[#161a1d] border border-[#d4af37]/20 text-[11px] text-gray-400">
-            Otomatik tetikleyiciler her sabah <strong>08:00</strong>'de aktifleşir.
+        <Link
+          href="/settings"
+          className="p-5 rounded-3xl bg-[#121517] hover:bg-[#161a1d] border border-[#23292e] hover:border-[#d4af37]/40 flex flex-col justify-between transition-all group cursor-pointer shadow-xl"
+        >
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37]">
+              <Zap className="w-5 h-5" />
+            </div>
+            <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-[#d4af37] transition-transform group-hover:translate-x-1" />
           </div>
-        </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-bold text-white font-serif-title">Sistem & API Ayarları</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Evolution API (ff), TTS ve Sessiz Saatler.</p>
+          </div>
+        </Link>
       </div>
     </div>
   );

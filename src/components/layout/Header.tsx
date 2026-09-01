@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
-  BookOpen, 
+  Activity, 
   Wifi, 
   WifiOff, 
   LogOut, 
@@ -15,7 +15,8 @@ import {
   Moon, 
   Sun,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  MessageSquare
 } from 'lucide-react';
 
 export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
@@ -29,7 +30,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const checkStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/evolution/status');
+      const res = await fetch('/api/evolution/status?instance=ff');
       const data = await res.json();
       if (data.state) {
         setStatus(data.state);
@@ -56,15 +57,13 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const getPageTitle = () => {
     if (pathname === '/') return 'KONTROL PANELİ';
     if (pathname.startsWith('/chat')) return 'CANLI SOHBET';
-    if (pathname.startsWith('/subscribers') || pathname.startsWith('/contacts')) return 'ABONE YÖNETİMİ';
+    if (pathname.startsWith('/subscribers') || pathname.startsWith('/contacts')) return 'ABONELER & KİŞİLER';
     if (pathname.startsWith('/special-days')) return 'ÖZEL GÜNLER';
-    if (pathname.startsWith('/hadith')) return 'HADİS & SÖZLER';
     if (pathname.startsWith('/groups')) return 'GRUP YÖNETİMİ';
     if (pathname.startsWith('/reports')) return 'İLETİM RAPORLARI';
     if (pathname.startsWith('/settings')) return 'SİSTEM & BAĞLANTI AYARLARI';
-    if (pathname.startsWith('/help')) return 'YARDIM & REHBER';
     if (pathname.startsWith('/campaigns')) return 'TOPLU BİLDİRİM';
-    return 'HİKMETNÂME';
+    return 'WHATSPULSE';
   };
 
   return (
@@ -85,16 +84,16 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#d4af37] via-[#f39c12] to-[#10b981] p-0.5 shadow-lg shadow-[#d4af37]/10 transition-transform group-hover:scale-105">
               <div className="w-full h-full bg-[#0b0d0e] rounded-[10px] flex items-center justify-center">
-                <BookOpen className="w-4.5 h-4.5 text-[#d4af37]" />
+                <Activity className="w-4.5 h-4.5 text-[#d4af37]" />
               </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-serif font-black text-base tracking-wide text-white font-serif-title">
-                  Hikmetnâme
+                  WhatsPulse
                 </span>
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.2 rounded bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30">
-                  v2.4.078
+                  v2.4.080
                 </span>
               </div>
             </div>
@@ -127,10 +126,10 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
               )}
             </span>
             <span className="hidden sm:inline font-mono">
-              {isConnected ? '((•)) WhatsApp: Bağlı' : '((•)) WhatsApp: Kopuk'}
+              {isConnected ? '((•)) WhatsApp: Bağlı (ff)' : '((•)) WhatsApp: Kopuk'}
             </span>
             <span className="sm:hidden text-[10px]">
-              {isConnected ? 'Bağlı' : 'Kopuk'}
+              {isConnected ? 'Bağlı (ff)' : 'Kopuk'}
             </span>
           </div>
 
@@ -153,17 +152,17 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
             {isDarkMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
           </button>
 
-          {/* User Profile Card: "👤 Sedat Bayraklı - Yönetici" */}
+          {/* User Profile Card */}
           <div className="flex items-center gap-2 pl-2 border-l border-[#23292e]">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#d4af37]/20 to-[#10b981]/20 border border-[#d4af37]/30 flex items-center justify-center text-xs font-bold text-[#d4af37]">
-              SB
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : 'SB'}
             </div>
             <div className="text-left leading-tight hidden sm:block">
               <div className="text-xs font-bold text-white truncate max-w-[130px]">
                 {user?.name || 'Sedat Bayraklı'}
               </div>
               <div className="text-[10px] text-[#d4af37] font-semibold">
-                Yönetici
+                {user?.role === 'ADMIN' ? 'Yönetici / Admin' : 'Kullanıcı'}
               </div>
             </div>
           </div>

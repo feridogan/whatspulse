@@ -9,14 +9,12 @@ import {
   MessageSquare, 
   Users, 
   Calendar, 
-  BookOpen, 
   FolderTree, 
   BarChart3, 
   Settings, 
-  HelpCircle, 
   LogOut,
   ShieldCheck,
-  Sparkles
+  Activity
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -26,13 +24,11 @@ export function Sidebar() {
   const menuItems = [
     { href: '/', label: 'Panel', icon: LayoutDashboard },
     { href: '/chat', label: 'Canlı Sohbet', icon: MessageSquare, badge: 'Canlı' },
-    { href: '/subscribers', label: 'Aboneler', icon: Users, badge: 'Rehber' },
+    { href: '/subscribers', label: 'Aboneler / Kişiler', icon: Users, badge: 'Rehber' },
     { href: '/special-days', label: 'Özel Günler', icon: Calendar },
-    { href: '/hadith', label: 'Hadis & Sözler', icon: BookOpen },
     { href: '/groups', label: 'Gruplar', icon: FolderTree },
     { href: '/reports', label: 'Raporlar', icon: BarChart3 },
     { href: '/settings', label: 'Ayarlar', icon: Settings },
-    { href: '/help', label: 'Yardım', icon: HelpCircle },
   ];
 
   return (
@@ -40,7 +36,7 @@ export function Sidebar() {
       <div className="space-y-4">
         <div className="px-2 pt-1 flex items-center justify-between">
           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#d4af37]">
-            MENÜ DİZİNİ
+            WHATSPULSE MENÜ
           </span>
           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#161a1d] text-[#10b981] border border-[#10b981]/20">
             PRO v2.4
@@ -89,7 +85,7 @@ export function Sidebar() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[#d4af37] text-xs font-bold">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Hat Güvenliği</span>
+              <span>Hat Güvenliği (ff)</span>
             </div>
             <span className="text-[9px] uppercase font-bold text-[#10b981] bg-[#10b981]/15 px-1.5 py-0.5 rounded border border-[#10b981]/20">
               GÜVENLİ
@@ -106,7 +102,7 @@ export function Sidebar() {
           className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" />
-          <span>Güvenli Çıkış</span>
+          <span>→ Güvenli Çıkış</span>
         </button>
       </div>
     </aside>

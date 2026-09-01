@@ -1,17 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { comparePassword, signToken } from '@/lib/auth';
+import { comparePassword, hashPassword, signToken } from '@/lib/auth';
+import { ensureDbSchemaSync } from '@/lib/db-sync';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureDbSchemaSync();
     const { email, password } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json({ error: 'E-posta ve şifre gereklidir.' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Check if any user exists in DB, if not auto-seed default admin
+    const userCount = await prisma.user.count();
+    if (userCount === 0) {
+      const defaultHash = await hashPassword('Admin123!');
+      await prisma.user.create({
+        data: {
+          email: 'admin@whatspulse.com',
+          name: 'Sedat Bayraklı',
+          password: defaultHash,
+          role: 'ADMIN',
+          isActive: true
+        }
+      });
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
     });
 
     if (!user) {
@@ -24,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (user.isActive === false) {
-      return NextResponse.json({ error: 'Hesabınız askıya alınmıştır veya pasif durumdadır. Lütfen sistem yöneticisi ile iletişime geçin.' }, { status: 403 });
+      return NextResponse.json({ error: 'Hesabınız askıya alınmıştır veya pasif durumdadır.' }, { status: 403 });
     }
 
     const tokenPayload = {

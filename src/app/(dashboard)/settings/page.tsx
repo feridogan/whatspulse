@@ -21,7 +21,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Sparkles,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Activity
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -71,7 +72,7 @@ export default function SettingsPage() {
       setLoading(true);
       const [setRes, evoRes] = await Promise.all([
         fetch("/api/settings"),
-        fetch("/api/evolution/status")
+        fetch("/api/evolution/status?instance=ff")
       ]);
       const setData = await setRes.json();
       const evoData = await evoRes.json();
@@ -141,7 +142,7 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setStatusMsg({ type: "success", text: "Hikmetnâme sistem ve yayın ayarları başarıyla kaydedildi." });
+        setStatusMsg({ type: "success", text: "WhatsPulse sistem ve bağlantı ayarları başarıyla kaydedildi." });
       } else {
         setStatusMsg({ type: "error", text: data.error || "Ayarlar kaydedilemedi." });
       }
@@ -155,7 +156,7 @@ export default function SettingsPage() {
   const handleFetchQr = async () => {
     setLoadingQr(true);
     try {
-      const res = await fetch(`/api/evolution/qr?instance=${encodeURIComponent(evoInstance)}&refresh=true`);
+      const res = await fetch(`/api/evolution/qr?instance=${encodeURIComponent(evoInstance || 'ff')}&refresh=true`);
       const data = await res.json();
       if (data.qrcode || data.base64) {
         setQrCodeData(data.qrcode || data.base64);
@@ -170,13 +171,13 @@ export default function SettingsPage() {
   };
 
   const handleLogoutInstance = async () => {
-    if (!confirm(`"${evoInstance}" WhatsApp oturumunu kapatmak istediğinize emin misiniz?`)) return;
+    if (!confirm(`"${evoInstance || 'ff'}" WhatsApp oturumunu kapatmak istediğinize emin misiniz?`)) return;
     setLoggingOut(true);
     try {
       const res = await fetch("/api/evolution/logout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instanceName: evoInstance })
+        body: JSON.stringify({ instanceName: evoInstance || 'ff' })
       });
       const data = await res.json();
       if (data.success) {
@@ -202,14 +203,14 @@ export default function SettingsPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-xs font-bold border border-[#d4af37]/30 font-serif-title">
-              SİSTEM & YAPAY ZEKÂ YAPILANDIRMASI
+              SİSTEM & YAPILANDIRMA
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white mt-1 font-serif-title">
-            Ayarlar & Bağlantı Yönetimi
+            WhatsPulse Ayarlar & Bağlantı Yönetimi
           </h1>
           <p className="text-xs text-gray-400">
-            Evolution API WhatsApp bağlantısı, Webhook, Sesli Mesaj AI (TTS), Zamanlayıcılar ve Veritabanı Yedekleme.
+            Evolution API (Instance: ff), Webhook, Sesli Mesaj AI (TTS), Zamanlayıcılar ve Veritabanı Yedekleme.
           </p>
         </div>
 
@@ -235,7 +236,7 @@ export default function SettingsPage() {
       )}
 
       <form onSubmit={handleSaveSettings} className="space-y-6">
-        {/* 1 & 2. Sistem Genel Durumu & Etkileşimli Gönderim Modu (Section 6) */}
+        {/* 1 & 2. Sistem Genel Durumu & Etkileşimli Gönderim Modu */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Power className="w-5 h-5 text-[#d4af37]" />
@@ -249,7 +250,7 @@ export default function SettingsPage() {
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-white font-serif-title">Sistem Genel Durumu</div>
-                <div className="text-[11px] text-gray-400">Tüm planlı ayet/hadis yayınlarını ve servisleri aç/kapa.</div>
+                <div className="text-[11px] text-gray-400">Tüm planlı bildirim ve mesajlaşma servislerini aç/kapa.</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -281,7 +282,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 3. 🔊 Sesli Mesaj Yapay Zeka Ayarları (TTS) (Section 6) */}
+        {/* 3. 🔊 Sesli Mesaj Yapay Zeka Ayarları (TTS) */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Mic className="w-5 h-5 text-[#10b981]" />
@@ -342,7 +343,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 4. 💾 Sistem Sağlığı & Bağlantılar (Section 6) */}
+        {/* 4. 💾 Sistem Sağlığı & Bağlantılar */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Server className="w-5 h-5 text-[#10b981]" />
@@ -369,19 +370,19 @@ export default function SettingsPage() {
             <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-1">
               <div className="text-[11px] text-gray-400">Evolution API (WhatsApp)</div>
               <div className="text-xs font-bold text-[#10b981] flex items-center gap-1 font-mono">
-                <CheckCircle2 className="w-3.5 h-3.5" /> {isConnected ? "Çalışıyor / Bağlı - Oturum: open" : "Kopuk"}
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isConnected ? "Çalışıyor / Bağlı (ff: open)" : "Kopuk"}
               </div>
             </div>
           </div>
         </div>
 
-        {/* 5. 📱 Evolution API Bağlantı Ayarları (Section 6) */}
+        {/* 5. 📱 Evolution API Bağlantı Ayarları (ff) */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
             <div className="flex items-center gap-2">
               <Wifi className="w-5 h-5 text-[#d4af37]" />
               <h2 className="text-sm font-bold text-white font-serif-title">
-                5. 📱 Evolution API Bağlantı Ayarları
+                5. 📱 Evolution API Bağlantı Ayarları (Instance: ff)
               </h2>
             </div>
 
@@ -390,7 +391,7 @@ export default function SettingsPage() {
                 ? "bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30"
                 : "bg-rose-500/20 text-rose-400 border-rose-500/30"
             }`}>
-              {isConnected ? "BAĞLI (AÇIK)" : "KOPUK"}
+              {isConnected ? "BAĞLI (AÇIK - ff)" : "KOPUK"}
             </span>
           </div>
 
@@ -481,7 +482,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 6. 🔗 Webhook Ayarı (Section 6) */}
+        {/* 6. 🔗 Webhook Ayarı */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
             <div className="flex items-center gap-2">
@@ -526,7 +527,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 7. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler (Section 6) */}
+        {/* 7. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Clock className="w-5 h-5 text-[#d4af37]" />
@@ -536,10 +537,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Sabah Ayeti */}
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Sabah Ayeti</span>
+                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Sabah Bildirimi</span>
                 <input
                   type="checkbox"
                   checked={morningActive}
@@ -556,10 +556,9 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Akşam Ayeti */}
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Akşam Ayeti</span>
+                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Akşam Bildirimi</span>
                 <input
                   type="checkbox"
                   checked={eveningActive}
@@ -576,10 +575,9 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Cuma Ayeti */}
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#10b981] font-serif-title">Cuma Ayeti & Tebriği</span>
+                <span className="text-xs font-bold text-[#10b981] font-serif-title">Cuma Özel Tebriği</span>
                 <input
                   type="checkbox"
                   checked={fridayActive}
@@ -598,7 +596,6 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            {/* Sessiz Saatler */}
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
               <div className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5 font-serif-title">
                 <Clock className="w-4 h-4 text-[#d4af37]" />
@@ -626,7 +623,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Anti-Spam Gecikme */}
             <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
               <div className="text-xs font-bold text-[#10b981] flex items-center gap-1.5 font-serif-title">
                 <ShieldCheck className="w-4 h-4 text-[#10b981]" />
@@ -658,7 +654,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 8. 🗄️ Veri Yedekleme & Geri Yükleme (Section 6) */}
+        {/* 8. 🗄️ Veri Yedekleme & Geri Yükleme */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Database className="w-5 h-5 text-[#d4af37]" />

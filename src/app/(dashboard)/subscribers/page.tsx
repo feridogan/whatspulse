@@ -19,12 +19,13 @@ import {
   X, 
   Send,
   Sparkles,
-  BookOpen,
   FolderTree,
   SlidersHorizontal,
   Phone,
   Mail,
-  Info
+  Info,
+  Smartphone,
+  PhoneCall
 } from "lucide-react";
 
 export default function SubscribersPage() {
@@ -34,7 +35,7 @@ export default function SubscribersPage() {
   const [search, setSearch] = useState("");
   const [filterSubscriber, setFilterSubscriber] = useState("ALL"); // ALL, ACTIVE, INACTIVE
   const [filterInteraction, setFilterInteraction] = useState("ALL"); // ALL, INTERACTIVE
-  const [filterMethod, setFilterMethod] = useState("ALL"); // ALL, AYET, HADIS, ALIM, TARIH
+  const [filterChannel, setFilterChannel] = useState("ALL"); // ALL, WHATSAPP, SMS, EMAIL
   const [selectedGroup, setSelectedGroup] = useState("ALL");
   const [total, setTotal] = useState(0);
 
@@ -60,8 +61,7 @@ export default function SubscribersPage() {
     email: "",
     company: "",
     notes: "",
-    categories: ["Ayet", "Hadis", "Alim", "Tarih"],
-    contentDetails: "Arapça + Meal + Tefsir",
+    channels: ["WhatsApp", "SMS", "E-Posta", "Sesli"],
     preferredTime: "08:00",
     language: "TR",
     groupIds: [] as string[],
@@ -107,8 +107,7 @@ export default function SubscribersPage() {
       email: "",
       company: "",
       notes: "",
-      categories: ["Ayet", "Hadis", "Alim", "Tarih"],
-      contentDetails: "Arapça + Meal + Tefsir",
+      channels: ["WhatsApp", "SMS", "E-Posta", "Sesli"],
       preferredTime: "08:00",
       language: "TR",
       groupIds: groups.length > 0 ? [groups[0].id] : [],
@@ -126,8 +125,7 @@ export default function SubscribersPage() {
       email: sub.email || "",
       company: sub.company || "",
       notes: sub.notes || "",
-      categories: ["Ayet", "Hadis", "Alim", "Tarih"],
-      contentDetails: "Arapça + Meal + Tefsir",
+      channels: ["WhatsApp", "SMS", "E-Posta", "Sesli"],
       preferredTime: sub.preferredTime || "08:00",
       language: sub.language || "TR",
       groupIds: sub.groups ? sub.groups.map((g: any) => g.groupId) : [],
@@ -236,23 +234,22 @@ export default function SubscribersPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-xs font-bold border border-[#d4af37]/30 font-serif-title">
-              ABONE & KİŞİ VERİTABANI
+              ABONE & KİŞİ YÖNETİMİ
             </span>
             <span className="text-xs text-gray-400 font-mono font-bold">
               ({total} Kayıtlı Abone)
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white mt-1 font-serif-title">
-            Abone Yönetimi & Bildirim Tercihleri
+            Aboneler & Bildirim Tercihleri
           </h1>
           <p className="text-xs text-gray-400">
-            Abonelerin gönderim kategorilerini (Ayet, Hadis, Alim, Tarih), dil/saat tercihlerini ve etkileşim durumlarını yönetin.
+            Abonelerin WhatsApp / SMS kanal tercihlerini, bildirim saatlerini ve etkileşim durumlarını tek ekrandan yönetin.
           </p>
         </div>
 
-        {/* 3 Action Buttons (Section 4) */}
+        {/* 3 Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* 1. Mavi: Rehberi Eşitle */}
           <button
             onClick={handleSyncContacts}
             disabled={syncing}
@@ -262,7 +259,6 @@ export default function SubscribersPage() {
             <span>{syncing ? "Eşitleniyor..." : "Rehberi Eşitle"}</span>
           </button>
 
-          {/* 2. Koyu Yeşil: VCF Rehber Yükle */}
           <button
             onClick={() => setShowVcfModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#064e3b] hover:bg-[#065f46] text-emerald-300 border border-emerald-500/30 text-xs font-bold shadow-md transition-all cursor-pointer"
@@ -271,7 +267,6 @@ export default function SubscribersPage() {
             <span>VCF Rehber Yükle (.vcf)</span>
           </button>
 
-          {/* 3. Açık Yeşil/Gold: + Yeni Abone Ekle */}
           <button
             onClick={handleOpenNewModal}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer"
@@ -282,9 +277,8 @@ export default function SubscribersPage() {
         </div>
       </div>
 
-      {/* Top Filter Bar (Section 4) */}
+      {/* Top Filter Bar */}
       <div className="p-4 rounded-2xl bg-[#121517] border border-[#23292e] flex flex-col lg:flex-row items-center justify-between gap-3 shadow-md">
-        {/* Search */}
         <form onSubmit={handleSearchSubmit} className="relative w-full lg:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
@@ -296,9 +290,7 @@ export default function SubscribersPage() {
           />
         </form>
 
-        {/* 4 Dropdown Filters */}
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          {/* [Tüm Aboneler ▾] */}
           <select
             value={filterSubscriber}
             onChange={(e) => setFilterSubscriber(e.target.value)}
@@ -309,7 +301,6 @@ export default function SubscribersPage() {
             <option value="INACTIVE">Pasif Aboneler</option>
           </select>
 
-          {/* [Tüm Etkileşimler ▾] */}
           <select
             value={filterInteraction}
             onChange={(e) => setFilterInteraction(e.target.value)}
@@ -320,20 +311,18 @@ export default function SubscribersPage() {
             <option value="NON_INTERACTIVE">Etkileşimsiz</option>
           </select>
 
-          {/* [Tüm Yöntemler ▾] */}
           <select
-            value={filterMethod}
-            onChange={(e) => setFilterMethod(e.target.value)}
+            value={filterChannel}
+            onChange={(e) => setFilterChannel(e.target.value)}
             className="bg-[#181c1f] border border-[#2e353c] text-xs text-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#d4af37] cursor-pointer"
           >
-            <option value="ALL">Tüm Yöntemler ▾</option>
-            <option value="AYET">Ayet Gönderimi</option>
-            <option value="HADIS">Hadis Gönderimi</option>
-            <option value="ALIM">Alim Sözleri</option>
-            <option value="TARIH">Tarihte Bugün</option>
+            <option value="ALL">Tüm Kanallar ▾</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="SMS">SMS</option>
+            <option value="EMAIL">E-Posta</option>
+            <option value="VOICE">Sesli Arama</option>
           </select>
 
-          {/* [Tüm Gruplar ▾] */}
           <select
             value={selectedGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
@@ -347,7 +336,7 @@ export default function SubscribersPage() {
         </div>
       </div>
 
-      {/* Abone Tablosu (Section 4) */}
+      {/* Abone Tablosu */}
       <div className="bg-[#121517] border border-[#23292e] rounded-3xl overflow-hidden shadow-2xl">
         {loading ? (
           <div className="p-12 text-center text-gray-400 space-y-2">
@@ -369,7 +358,7 @@ export default function SubscribersPage() {
                 <tr>
                   <th className="py-3.5 px-4">ABONE (İSİM & TELEFON)</th>
                   <th className="py-3.5 px-4">GRUP & KAYIT</th>
-                  <th className="py-3.5 px-4">GÖNDERİM TERCİHLERİ</th>
+                  <th className="py-3.5 px-4">GÖNDERİM KANALLARI</th>
                   <th className="py-3.5 px-4">DİL / SAAT</th>
                   <th className="py-3.5 px-4">DURUM & ETKİLEŞİM</th>
                   <th className="py-3.5 px-4">SON GÖNDERİM</th>
@@ -400,7 +389,7 @@ export default function SubscribersPage() {
                         </div>
                       </td>
 
-                      {/* GRUP & KAYIT: Mavi etiketler */}
+                      {/* GRUP & KAYIT */}
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap gap-1 max-w-xs">
                           {sub.groups && sub.groups.length > 0 ? (
@@ -414,36 +403,36 @@ export default function SubscribersPage() {
                             ))
                           ) : (
                             <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-semibold flex items-center gap-1">
-                              <span>🌐</span> Rehber
+                              <span>🌐</span> Genel Rehber
                             </span>
                           )}
                         </div>
                       </td>
 
-                      {/* GÖNDERİM TERCİHLERİ: Ayet(Yeşil), Hadis(Turuncu), Alim(Mor), Tarih(Kırmızı) */}
+                      {/* GÖNDERİM KANALLARI */}
                       <td className="py-3.5 px-4">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-1">
                             <span className="px-1.5 py-0.2 rounded bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 text-[10px] font-bold">
-                              Ayet
+                              WhatsApp
                             </span>
-                            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
-                              Hadis
+                            <span className="px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold">
+                              SMS
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
-                              Alim
+                              E-Posta
                             </span>
-                            <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
-                              Tarih
+                            <span className="px-1.5 py-0.2 rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 text-[10px] font-bold">
+                              Sesli
                             </span>
                           </div>
-                          <div className="text-[10px] text-gray-400 font-serif">
-                            Arapça + Meal + Tefsir
+                          <div className="text-[10px] text-gray-400">
+                            WhatsApp Öncelikli + Otomasyon
                           </div>
                         </div>
                       </td>
 
-                      {/* DİL / SAAT: TR rozeti ve saat (Örn: 08:00) */}
+                      {/* DİL / SAAT */}
                       <td className="py-3.5 px-4 font-mono text-[11px] text-gray-300">
                         <div className="flex items-center gap-1.5">
                           <span className="px-1.5 py-0.5 rounded bg-[#181c1f] text-[#d4af37] border border-[#d4af37]/30 text-[10px] font-bold">
@@ -453,7 +442,7 @@ export default function SubscribersPage() {
                         </div>
                       </td>
 
-                      {/* DURUM & ETKİLEŞİM: "Aktif" (Yeşil) ve "💬 Etkileşimli" */}
+                      {/* DURUM & ETKİLEŞİM */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5">
                           <span className="px-2 py-0.5 rounded-full bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 text-[10px] font-bold">
@@ -470,19 +459,17 @@ export default function SubscribersPage() {
                         {sub.lastSentAt ? new Date(sub.lastSentAt).toLocaleDateString("tr-TR") : "Gönderilmedi"}
                       </td>
 
-                      {/* AKSİYONLAR: [Düzenle], [Mesaj Gönder], [Detay], [Kara Liste], [Sil] */}
+                      {/* AKSİYONLAR */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Mesaj Gönder */}
                           <button
                             onClick={() => handleOpenSendMessage(sub)}
                             className="p-1.5 rounded-xl bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/25 transition-all cursor-pointer"
-                            title="Mesaj Gönder"
+                            title="WhatsApp Mesajı Gönder"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Düzenle */}
                           <button
                             onClick={() => handleOpenEditModal(sub)}
                             className="p-1.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] transition-all cursor-pointer"
@@ -491,16 +478,6 @@ export default function SubscribersPage() {
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Detay */}
-                          <button
-                            onClick={() => handleOpenEditModal(sub)}
-                            className="p-1.5 rounded-xl bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/25 transition-all cursor-pointer"
-                            title="Detay Gör"
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Sil */}
                           <button
                             onClick={() => handleDeleteSubscriber(sub.id, sub.name)}
                             className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all cursor-pointer"

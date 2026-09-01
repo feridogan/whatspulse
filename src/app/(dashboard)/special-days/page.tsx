@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Calendar, 
   Plus, 
@@ -11,40 +11,40 @@ import {
   CheckCircle2, 
   Edit3, 
   Trash2, 
-  BookOpen,
-  Volume2
+  Volume2,
+  Users
 } from "lucide-react";
 
 export default function SpecialDaysPage() {
   const [specialDays, setSpecialDays] = useState([
     {
       id: "1",
-      title: "Kadir Gecesi Özel Tebriği",
-      hijriDate: "27 Ramazan 1447",
-      miladiDate: "2026-03-16",
+      title: "Yılbaşı ve Yeni Yıl Kutlaması",
+      hijriDate: "Özel Gün",
+      miladiDate: "2027-01-01",
       targetGroup: "Tüm Aboneler (1857 Kişi)",
       status: "PLANLANDI",
-      content: "Bin aydan daha hayırlı olan Kadir Geceniz mübarek olsun. Dualarınız kabul, ibadetleriniz makbul olsun.",
+      content: "Yeni yılın size ve sevdiklerinize sağlık, mutluluk ve bereket getirmesini dileriz.",
       hasAudio: true,
     },
     {
       id: "2",
       title: "Ramazan Bayramı Tebriği",
-      hijriDate: "1 Şevval 1447",
+      hijriDate: "1 Şevval",
       miladiDate: "2026-03-20",
       targetGroup: "Tüm Aboneler",
       status: "PLANLANDI",
-      content: "Ramazan Bayramınızı en kalbi duygularımızla kutlar, aileniz ve sevdiklerinizle huzurlu bir bayram dileriz.",
+      content: "Ramazan Bayramınızı en kalbi duygularımızla kutlar, huzurlu ve bereketli bir bayram dileriz.",
       hasAudio: true,
     },
     {
       id: "3",
-      title: "Mevlid Kandili Mesajı",
-      hijriDate: "12 Rebiülevvel 1448",
-      miladiDate: "2026-08-25",
+      title: "Kurban Bayramı Tebriği",
+      hijriDate: "10 Zilhicce",
+      miladiDate: "2026-05-27",
       targetGroup: "Tüm Aboneler",
       status: "HAZIR",
-      content: "Peygamber Efendimiz (s.a.v)'in dünyayı teşriflerinin yıl dönümü olan Mevlid Kandiliniz mübarek olsun.",
+      content: "Kurban Bayramınız mübarek olsun. Sevdiklerinizle birlikte nice mutlu ve huzurlu bayramlara.",
       hasAudio: false,
     }
   ]);
@@ -56,14 +56,14 @@ export default function SpecialDaysPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-xs font-bold border border-[#d4af37]/30 font-serif-title">
-              DİNİ GÜNLER & KANDİLLER
+              ÖZEL GÜN & ETKİNLİK TAKVİMİ
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white mt-1 font-serif-title">
-            Özel Günler & Tebrik Takvimi
+            Özel Günler & Tebrik Yayınları
           </h1>
           <p className="text-xs text-gray-400">
-            Kandil, Bayram ve Özel geceler için önceden planlanmış tebrik mesajlarını ve sesli tebrikleri yönetin.
+            Bayram, Yılbaşı, Tebrik ve Özel etkinlikler için planlanmış WhatsApp bildirimlerini yönetin.
           </p>
         </div>
 
@@ -71,7 +71,7 @@ export default function SpecialDaysPage() {
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer self-start sm:self-auto"
         >
           <Plus className="w-4 h-4 text-black" />
-          <span>+ Yeni Özel Gün Tebriği Ekle</span>
+          <span>+ Yeni Özel Gün Ekle</span>
         </button>
       </div>
 
