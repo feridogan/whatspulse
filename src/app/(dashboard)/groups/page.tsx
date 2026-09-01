@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { 
   FolderTree, 
@@ -16,7 +16,9 @@ import {
   RefreshCw,
   Sparkles,
   UserMinus,
-  Folder
+  Folder,
+  UserPlus,
+  ArrowRight
 } from "lucide-react";
 
 export default function GroupsPage() {
@@ -63,10 +65,18 @@ export default function GroupsPage() {
     setModalLoading(true);
 
     try {
-      const res = await fetch("/api/subscribers?limit=500");
+      // Fetch ALL subscribers (no 500 limit)
+      const res = await fetch("/api/subscribers?limit=10000");
       const data = await res.json();
-      if (data.success) {
-        setOtherList(data.subscribers || []);
+      if (data.success && Array.isArray(data.subscribers)) {
+        setOtherList(data.subscribers);
+      } else {
+        // Fallback to contacts API
+        const cRes = await fetch("/api/contacts?limit=10000");
+        const cData = await cRes.json();
+        if (Array.isArray(cData.contacts)) {
+          setOtherList(cData.contacts);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -109,13 +119,35 @@ export default function GroupsPage() {
   };
 
   const handleAddAll = () => {
-    const filteredOthers = otherList.filter(s => 
-      s.name.toLowerCase().includes(rightSearch.toLowerCase()) || 
-      s.phone.includes(rightSearch)
-    );
-    const addedIds = new Set(filteredOthers.map(s => s.id));
+    const q = rightSearch.toLowerCase().trim();
+    const matches = otherList.filter(s => {
+      if (!q) return true;
+      return (
+        (s.name && s.name.toLowerCase().includes(q)) ||
+        (s.phone && s.phone.includes(q)) ||
+        (s.company && s.company.toLowerCase().includes(q))
+      );
+    });
+
+    const addedIds = new Set(matches.map(s => s.id));
     setOtherList(prev => prev.filter(s => !addedIds.has(s.id)));
-    setInGroupList(prev => [...prev, ...filteredOthers]);
+    setInGroupList(prev => [...prev, ...matches]);
+  };
+
+  const handleRemoveAll = () => {
+    const q = leftSearch.toLowerCase().trim();
+    const matches = inGroupList.filter(s => {
+      if (!q) return true;
+      return (
+        (s.name && s.name.toLowerCase().includes(q)) ||
+        (s.phone && s.phone.includes(q)) ||
+        (s.company && s.company.toLowerCase().includes(q))
+      );
+    });
+
+    const removedIds = new Set(matches.map(s => s.id));
+    setInGroupList(prev => prev.filter(s => !removedIds.has(s.id)));
+    setOtherList(prev => [...prev, ...matches]);
   };
 
   const handleSaveDualGroup = async (e: React.FormEvent) => {
@@ -185,19 +217,30 @@ export default function GroupsPage() {
     }
   };
 
-  const filteredInGroup = inGroupList.filter(s => 
-    s.name.toLowerCase().includes(leftSearch.toLowerCase()) || 
-    s.phone.includes(leftSearch)
-  );
+  // Instant client-side memoized filters for high performance with 1,800+ records
+  const filteredInGroup = useMemo(() => {
+    const q = leftSearch.toLowerCase().trim();
+    if (!q) return inGroupList;
+    return inGroupList.filter(s => 
+      (s.name && s.name.toLowerCase().includes(q)) || 
+      (s.phone && s.phone.includes(q)) ||
+      (s.company && s.company.toLowerCase().includes(q))
+    );
+  }, [inGroupList, leftSearch]);
 
-  const filteredOthers = otherList.filter(s => 
-    s.name.toLowerCase().includes(rightSearch.toLowerCase()) || 
-    s.phone.includes(rightSearch)
-  );
+  const filteredOthers = useMemo(() => {
+    const q = rightSearch.toLowerCase().trim();
+    if (!q) return otherList;
+    return otherList.filter(s => 
+      (s.name && s.name.toLowerCase().includes(q)) || 
+      (s.phone && s.phone.includes(q)) ||
+      (s.company && s.company.toLowerCase().includes(q))
+    );
+  }, [otherList, rightSearch]);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header & Sub-info banner (Section 5) */}
+      {/* Header & Sub-info banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl">
         <div>
           <div className="flex items-center gap-2">
@@ -209,7 +252,7 @@ export default function GroupsPage() {
             Grup Yönetimi
           </h1>
           <p className="text-xs text-gray-400 max-w-2xl mt-1">
-            SİSTEMDE TANIMLI OLAN VE ABONELERİ GRUPLANDIRDIĞINIZ ALANLARI YÖNETİN, ÇİFT PENCERELİ ATAMA PANELİ İLE ÜYELERİ DÜZENLEYİN.
+            Sistemde tanımlı olan ve aboneleri gruplandırdığınız alanları yönetin, çift pencereli atama paneli ile üyeleri düzenleyin.
           </p>
         </div>
 
@@ -223,7 +266,7 @@ export default function GroupsPage() {
         </button>
       </div>
 
-      {/* Grup Listesi Tablosu (Section 5) */}
+      {/* Grup Listesi Tablosu */}
       <div className="bg-[#121517] border border-[#23292e] rounded-3xl overflow-hidden shadow-2xl">
         {loading ? (
           <div className="p-12 text-center text-gray-400 space-y-2">
@@ -250,61 +293,46 @@ export default function GroupsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#23292e]/60 font-sans">
-                {groups.map((g) => {
-                  const count = g._count?.subscribers || g._count?.contacts || 0;
+                {groups.map((group) => {
+                  const count = group._count?.subscribers || group._count?.contacts || 0;
                   return (
-                    <tr key={g.id} className="hover:bg-[#161a1d]/60 transition-colors">
-                      {/* Grup Adı (Klasör ikonu ile tıklanabilir) */}
+                    <tr key={group.id} className="hover:bg-[#161a1d]/60 transition-colors">
                       <td className="py-3.5 px-4">
-                        <button
-                          onClick={() => handleOpenEditGroup(g)}
-                          className="flex items-center gap-2.5 text-left font-bold text-white hover:text-[#d4af37] transition-colors cursor-pointer"
-                        >
-                          <div className="w-8 h-8 rounded-xl bg-[#d4af37]/10 border border-[#d4af37]/20 flex items-center justify-center text-[#d4af37]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#d4af37]/20 to-[#10b981]/20 border border-[#d4af37]/30 flex items-center justify-center text-xs font-bold text-[#d4af37]">
                             <Folder className="w-4 h-4" />
                           </div>
-                          <span className="text-sm font-serif-title">{g.name}</span>
-                        </button>
+                          <span className="font-bold text-white text-xs sm:text-sm">
+                            {group.name}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* Açıklama */}
-                      <td className="py-3.5 px-4 text-gray-400">
-                        {g.description || <span className="italic text-gray-600">-</span>}
+                      <td className="py-3.5 px-4 text-gray-400 max-w-xs truncate">
+                        {group.description || "—"}
                       </td>
 
-                      {/* Aktif Abone Sayısı: Mavi rozet (👤 X Aktif) */}
-                      <td className="py-3.5 px-4 font-mono">
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1 w-fit">
-                          <span>👤</span> {count} Aktif
+                      <td className="py-3.5 px-4">
+                        <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 flex items-center gap-1.5 w-fit">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{count} Aktif</span>
                         </span>
                       </td>
 
-                      {/* Aksiyonlar: Uçak/Gönder, Kalem/Düzenle, Çöp Kutusu/Sil */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Toplu Mesaj At (Uçak) */}
-                          <Link
-                            href={`/chat?groupId=${g.id}`}
-                            className="p-1.5 rounded-xl bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/25 transition-all cursor-pointer"
-                            title="Gruba Toplu Mesaj Gönder"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                          </Link>
-
-                          {/* Düzenle (Kalem) */}
                           <button
-                            onClick={() => handleOpenEditGroup(g)}
-                            className="p-1.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-gray-300 border border-[#2e353c] transition-all cursor-pointer"
+                            onClick={() => handleOpenEditGroup(group)}
+                            className="p-1.5 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-[#d4af37] border border-[#2e353c] transition-all cursor-pointer"
                             title="Çift Pencerede Düzenle"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Sil (Çöp Kutusu) */}
                           <button
-                            onClick={() => handleDeleteGroup(g.id, g.name)}
+                            onClick={() => handleDeleteGroup(group.id, group.name)}
                             className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all cursor-pointer"
-                            title="Sil"
+                            title="Grubu Sil"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -319,38 +347,46 @@ export default function GroupsPage() {
         )}
       </div>
 
-      {/* "YENİ GRUP TANIMLA" Çift Pencereli Modal (Section 5) */}
+      {/* ÇİFT PENCERELİ GRUP TANIMLAMA & ATAMA MODALI */}
       {showDualModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#121517] border border-[#23292e] rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-[#121517] border border-[#23292e] rounded-3xl max-w-5xl w-full p-5 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] space-y-4">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
               <div className="flex items-center gap-2">
                 <FolderTree className="w-5 h-5 text-[#d4af37]" />
-                <h3 className="text-base font-bold text-white font-serif-title">
-                  {editingGroup ? "Grup ve Abone Atamasını Düzenle" : "YENİ GRUP TANIMLA"}
+                <h3 className="text-base font-bold text-white font-serif-title uppercase tracking-wide">
+                  {editingGroup ? `GRUP DÜZENLE: ${editingGroup.name}` : "YENİ GRUP TANIMLA"}
                 </h3>
               </div>
-              <button onClick={() => setShowDualModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
+              <button
+                onClick={() => setShowDualModal(false)}
+                className="p-1.5 rounded-xl bg-[#181c1f] text-gray-400 hover:text-white border border-[#2e353c] transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Üst Alan: GRUP ADI ve AÇIKLAMA */}
+            {/* Group Name & Desc inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">GRUP ADI *</label>
+                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 font-serif-title">
+                  GRUP ADI *
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Örn: Sabah Ayeti Takipçileri"
+                  placeholder="Örn: VIP Müşteriler, Kurumsal Aboneler"
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">AÇIKLAMA</label>
+                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 font-serif-title">
+                  AÇIKLAMA / NOT
+                </label>
                 <input
                   type="text"
                   placeholder="Grup hakkında kısa açıklama..."
@@ -361,54 +397,72 @@ export default function GroupsPage() {
               </div>
             </div>
 
-            {/* ÇİFT PENCERE (DUAL WINDOW) MİMARİSİ */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[340px] overflow-hidden">
-              {/* SOL PENCERE: "✓ Bu Gruptaki Aboneler (X)" */}
-              <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#10b981]/30 flex flex-col space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#10b981] font-serif-title">
-                    <span>✓ Bu Gruptaki Aboneler ({inGroupList.length})</span>
+            {/* DUAL WINDOW CONTAINER */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-[360px] max-h-[460px] overflow-hidden pt-1">
+              {/* SOL PENCERE: BU GRUPTAKİ ABONELER */}
+              <div className="bg-[#181c1f] border border-[#2e353c] rounded-2xl p-3 flex flex-col justify-between overflow-hidden shadow-inner">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#2e353c]">
+                    <span className="text-xs font-bold text-[#10b981] flex items-center gap-1.5 font-serif-title">
+                      <Check className="w-4 h-4" />
+                      <span>✓ BU GRUPTAKİ ABONELER ({filteredInGroup.length})</span>
+                    </span>
+                    {inGroupList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveAll}
+                        className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-bold"
+                      >
+                        Tümünü Çıkar
+                      </button>
+                    )}
                   </div>
-                  <span className="text-[10px] text-gray-400">Grupta Kayıtlı</span>
+
+                  {/* Sol Arama Kutusu */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="🔍 Gruptakilerde ara..."
+                      value={leftSearch}
+                      onChange={(e) => setLeftSearch(e.target.value)}
+                      className="w-full bg-[#121517] border border-[#2e353c] rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#10b981]"
+                    />
+                  </div>
                 </div>
 
-                {/* Search in Left Window */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="🔍 Gruptakilerde ara (İsim / Tel)..."
-                    value={leftSearch}
-                    onChange={(e) => setLeftSearch(e.target.value)}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg pl-8 pr-2 py-1 text-xs text-white focus:outline-none focus:border-[#10b981]"
-                  />
-                </div>
-
-                {/* Left List + Gruptan Çıkar Button */}
-                <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1 max-h-60">
+                {/* Sol Liste Scroll Area */}
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 mt-2 max-h-[290px]">
                   {modalLoading ? (
-                    <div className="p-6 text-center text-xs text-gray-500">Yükleniyor...</div>
+                    <div className="p-8 text-center text-gray-400 space-y-2">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#10b981]" />
+                      <p className="text-[11px]">Üyeler yükleniyor...</p>
+                    </div>
                   ) : filteredInGroup.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-gray-500 italic">
-                      Bu grupta henüz abone yok. Sağ pencereden ekleyebilirsiniz.
+                    <div className="p-8 text-center text-gray-500 space-y-1">
+                      <Users className="w-6 h-6 mx-auto opacity-30" />
+                      <p className="text-xs">Bu grupta henüz abone yok.</p>
+                      <p className="text-[10px] text-gray-400">Sağ taraftaki listeden "+ Ekle" butonuna basarak ekleyin.</p>
                     </div>
                   ) : (
                     filteredInGroup.map((sub) => (
                       <div
                         key={sub.id}
-                        className="p-2 rounded-xl bg-[#181c1f] border border-[#2e353c] flex items-center justify-between text-xs hover:border-[#10b981]/40 transition-colors"
+                        className="p-2 rounded-xl bg-[#121517] border border-[#23292e] flex items-center justify-between gap-2 hover:border-rose-500/40 transition-colors"
                       >
-                        <div className="min-w-0 pr-2">
-                          <div className="font-bold text-white truncate">{sub.name}</div>
-                          <div className="text-[10px] text-gray-400 font-mono">{sub.phone}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white truncate">{sub.name}</div>
+                          <div className="text-[10px] text-[#10b981] font-mono">{sub.phone}</div>
                         </div>
+
                         <button
                           type="button"
                           onClick={() => handleRemoveSubscriber(sub)}
-                          className="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                          className="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                          title="Gruptan Çıkar"
                         >
                           <UserMinus className="w-3 h-3" />
-                          <span>Gruptan Çıkar</span>
+                          <span>Çıkar</span>
                         </button>
                       </div>
                     ))
@@ -416,60 +470,76 @@ export default function GroupsPage() {
                 </div>
               </div>
 
-              {/* SAĞ PENCERE: "👥 Diğer Aboneler (Y)" */}
-              <div className="p-3.5 rounded-2xl bg-[#161a1d] border border-[#23292e] flex flex-col space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-300 font-serif-title">
-                    <span>👥 Diğer Aboneler ({otherList.length})</span>
+              {/* SAĞ PENCERE: DİĞER ABONELER (TÜM LİSTE) */}
+              <div className="bg-[#181c1f] border border-[#2e353c] rounded-2xl p-3 flex flex-col justify-between overflow-hidden shadow-inner">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#2e353c]">
+                    <span className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5 font-serif-title">
+                      <Users className="w-4 h-4" />
+                      <span>👥 DİĞER ABONELER ({filteredOthers.length})</span>
+                    </span>
+
+                    {/* Sağ Üst: [Tümünü Ekle] Butonu */}
+                    <button
+                      type="button"
+                      onClick={handleAddAll}
+                      disabled={filteredOthers.length === 0}
+                      className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-[10px] font-extrabold shadow-sm flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                    >
+                      <UserPlus className="w-3 h-3" />
+                      <span>Tümünü Ekle ({filteredOthers.length})</span>
+                    </button>
                   </div>
-                  {/* Sağ Üst: "Tümünü Ekle" butonu */}
-                  <button
-                    type="button"
-                    onClick={handleAddAll}
-                    disabled={otherList.length === 0}
-                    className="text-[10px] text-[#d4af37] hover:text-[#e5c158] font-bold disabled:opacity-40 cursor-pointer"
-                  >
-                    Tümünü Ekle
-                  </button>
+
+                  {/* Sağ Arama Kutusu */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="🔍 Diğer abonelerde ara..."
+                      value={rightSearch}
+                      onChange={(e) => setRightSearch(e.target.value)}
+                      className="w-full bg-[#121517] border border-[#2e353c] rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
                 </div>
 
-                {/* Search in Right Window */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="🔍 Diğer abonelerde ara..."
-                    value={rightSearch}
-                    onChange={(e) => setRightSearch(e.target.value)}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg pl-8 pr-2 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37]"
-                  />
-                </div>
-
-                {/* Right List + Yeşil [← Ekle] button */}
-                <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1 max-h-60">
+                {/* Sağ Liste Scroll Area */}
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 mt-2 max-h-[290px]">
                   {modalLoading ? (
-                    <div className="p-6 text-center text-xs text-gray-500">Yükleniyor...</div>
+                    <div className="p-8 text-center text-gray-400 space-y-2">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#d4af37]" />
+                      <p className="text-[11px]">Tüm rehber listesi getiriliyor...</p>
+                    </div>
                   ) : filteredOthers.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-gray-500 italic">
-                      Eklenebilecek başka abone kalmadı.
+                    <div className="p-8 text-center text-gray-500 space-y-1">
+                      <Check className="w-6 h-6 mx-auto text-[#10b981]" />
+                      <p className="text-xs text-gray-400">Tüm aboneler bu gruba eklendi veya eşleşen kayıt bulunamadı.</p>
                     </div>
                   ) : (
                     filteredOthers.map((sub) => (
                       <div
                         key={sub.id}
-                        className="p-2 rounded-xl bg-[#181c1f] border border-[#2e353c] flex items-center justify-between text-xs hover:border-[#d4af37]/40 transition-colors"
+                        className="p-2 rounded-xl bg-[#121517] border border-[#23292e] flex items-center justify-between gap-2 hover:border-[#10b981]/40 transition-colors"
                       >
-                        <div className="min-w-0 pr-2">
-                          <div className="font-bold text-white truncate">{sub.name}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                            <span>{sub.name}</span>
+                            {sub.company && (
+                              <span className="text-[10px] text-gray-500 font-normal truncate">({sub.company})</span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-gray-400 font-mono">{sub.phone}</div>
                         </div>
+
                         <button
                           type="button"
                           onClick={() => handleAddSubscriber(sub)}
-                          className="px-2.5 py-1 rounded-lg bg-[#10b981] hover:bg-[#059669] text-white text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-sm"
+                          className="px-2 py-1 rounded-lg bg-[#10b981]/15 hover:bg-[#10b981]/25 text-[#10b981] border border-[#10b981]/30 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                          title="Gruba Ekle"
                         >
-                          <ArrowLeft className="w-3 h-3" />
-                          <span>← Ekle</span>
+                          <Plus className="w-3 h-3" />
+                          <span>+ Ekle</span>
                         </button>
                       </div>
                     ))
@@ -478,17 +548,17 @@ export default function GroupsPage() {
               </div>
             </div>
 
-            {/* Alt Bar: [İptal] ve [Grubu ve X Aboneyi Kaydet] (Yeşil Buton) */}
+            {/* Modal Footer / Save Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-[#23292e]">
-              <span className="text-xs text-gray-400 font-serif">
-                Gruba Toplam: <strong className="text-[#10b981]">{inGroupList.length} Abone</strong> atanacak.
-              </span>
+              <div className="text-xs text-gray-400">
+                Gruptaki Üye Sayısı: <strong className="text-[#10b981] font-mono">{inGroupList.length}</strong> / Toplam Havuz: <span className="font-mono text-white">{inGroupList.length + otherList.length}</span>
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowDualModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-xs font-semibold text-gray-300 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-[#181c1f] hover:bg-[#202529] text-xs font-semibold text-gray-300 border border-[#2e353c] cursor-pointer"
                 >
                   İptal
                 </button>
@@ -496,9 +566,16 @@ export default function GroupsPage() {
                   type="button"
                   onClick={handleSaveDualGroup}
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs font-black shadow-lg shadow-[#10b981]/20 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#10b981] hover:from-[#e5c158] hover:to-[#059669] text-black text-xs font-black shadow-lg shadow-[#d4af37]/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? "Kaydediliyor..." : `Grubu ve ${inGroupList.length} Aboneyi Kaydet`}
+                  {saving ? (
+                    <span>Kaydediliyor...</span>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 text-black" />
+                      <span>Grubu ve Üyeleri Kaydet</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

@@ -5,7 +5,6 @@ import {
   Settings, 
   Power, 
   UserCheck, 
-  Mic, 
   Wifi, 
   WifiOff, 
   QrCode, 
@@ -30,22 +29,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // 1. Sistem Genel Durumu & 2. Etkileşimli Gönderim Modu
+  // 1. Sistem Genel Durumu & Etkileşimli Gönderim Modu
   const [systemActive, setSystemActive] = useState(true);
   const [interactiveModeOnly, setInteractiveModeOnly] = useState(false);
 
-  // 3. Sesli Mesaj & Yapay Zeka (TTS)
-  const [ttsEngine, setTtsEngine] = useState("edge_ai");
-  const [voiceCharacter, setVoiceCharacter] = useState("tr-TR-AhmetNeural");
-  const [azureKey, setAzureKey] = useState("");
-  const [azureRegion, setAzureRegion] = useState("westeurope");
-
-  // 5. Evolution API Bağlantı Ayarları
+  // 3. Evolution API Bağlantı Ayarları
   const [evoUrl, setEvoUrl] = useState("http://10.0.201.201:3800");
   const [evoApiKey, setEvoApiKey] = useState("16f54b4d7f24e095e8e88761f3bc993d863cafced9d6f99939824d28a206726a");
   const [evoInstance, setEvoInstance] = useState("ff");
 
-  // 6. Webhook Ayarı
+  // 4. Webhook Ayarı
   const [webhookActive, setWebhookActive] = useState(true);
   const [webhookUrl, setWebhookUrl] = useState("https://mesaj.cakirlar.net/api/webhook");
 
@@ -55,7 +48,7 @@ export default function SettingsPage() {
   const [loadingQr, setLoadingQr] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // 7. Otomatik Gönderim Görevleri & Tetikleyiciler
+  // 5. Otomatik Gönderim Görevleri & Tetikleyiciler
   const [morningActive, setMorningActive] = useState(true);
   const [morningTime, setMorningTime] = useState("08:00");
   const [eveningActive, setEveningActive] = useState(true);
@@ -81,10 +74,6 @@ export default function SettingsPage() {
         const s = setData.settings;
         if (s.system_active !== undefined) setSystemActive(s.system_active === "true" || s.system_active === true);
         if (s.interactive_mode !== undefined) setInteractiveModeOnly(s.interactive_mode === "true" || s.interactive_mode === true);
-        if (s.tts_engine) setTtsEngine(s.tts_engine);
-        if (s.voice_character) setVoiceCharacter(s.voice_character);
-        if (s.azure_key) setAzureKey(s.azure_key);
-        if (s.azure_region) setAzureRegion(s.azure_region);
         if (s.evolution_api_url) setEvoUrl(s.evolution_api_url);
         if (s.evolution_global_key) setEvoApiKey(s.evolution_global_key);
         if (s.evolution_instance) setEvoInstance(s.evolution_instance);
@@ -117,10 +106,6 @@ export default function SettingsPage() {
     const payload = {
       system_active: String(systemActive),
       interactive_mode: String(interactiveModeOnly),
-      tts_engine: ttsEngine,
-      voice_character: voiceCharacter,
-      azure_key: azureKey,
-      azure_region: azureRegion,
       evolution_api_url: evoUrl.trim(),
       evolution_global_key: evoApiKey.trim(),
       evolution_instance: evoInstance.trim(),
@@ -210,7 +195,7 @@ export default function SettingsPage() {
             WhatsPulse Ayarlar & Bağlantı Yönetimi
           </h1>
           <p className="text-xs text-gray-400">
-            Evolution API (Instance: ff), Webhook, Sesli Mesaj AI (TTS), Zamanlayıcılar ve Veritabanı Yedekleme.
+            Evolution API (Instance: ff), Webhook, Zamanlayıcılar, Sessiz Saatler ve Veri Yedekleme.
           </p>
         </div>
 
@@ -236,7 +221,7 @@ export default function SettingsPage() {
       )}
 
       <form onSubmit={handleSaveSettings} className="space-y-6">
-        {/* 1 & 2. Sistem Genel Durumu & Etkileşimli Gönderim Modu */}
+        {/* 1. Sistem Genel Durumu & Etkileşimli Gönderim Modu */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Power className="w-5 h-5 text-[#d4af37]" />
@@ -282,73 +267,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 3. 🔊 Sesli Mesaj Yapay Zeka Ayarları (TTS) */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
-            <Mic className="w-5 h-5 text-[#10b981]" />
-            <h2 className="text-sm font-bold text-white font-serif-title">
-              3. 🔊 Sesli Mesaj Yapay Zeka Ayarları (TTS)
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Seslendirme Motoru (TTS)</label>
-              <select
-                value={ttsEngine}
-                onChange={(e) => setTtsEngine(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37] cursor-pointer"
-              >
-                <option value="edge_ai">Microsoft Edge AI (Neural - Doğal ve Akıcı)</option>
-                <option value="google_tts">Google Cloud Text-to-Speech</option>
-                <option value="azure_speech">Microsoft Azure AI Speech</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Seslendirme Karakteri / Tonu</label>
-              <select
-                value={voiceCharacter}
-                onChange={(e) => setVoiceCharacter(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37] cursor-pointer"
-              >
-                <option value="tr-TR-AhmetNeural">Ahmet (Vakur, Tok Erkek Sesi - Önerilen)</option>
-                <option value="tr-TR-EmelNeural">Emel (Akıcı Kadın Sesi)</option>
-                <option value="tr-TR-SelmaNeural">Selma (Kurumsal Kadın Sesi)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Azure Speech Key</label>
-              <input
-                type="password"
-                placeholder="İsteğe bağlı Azure Speech Key..."
-                value={azureKey}
-                onChange={(e) => setAzureKey(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">Azure Region</label>
-              <input
-                type="text"
-                placeholder="westeurope"
-                value={azureRegion}
-                onChange={(e) => setAzureRegion(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 4. 💾 Sistem Sağlığı & Bağlantılar */}
+        {/* 2. 💾 Sistem Sağlığı & Bağlantılar */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Server className="w-5 h-5 text-[#10b981]" />
             <h2 className="text-sm font-bold text-white font-serif-title">
-              4. 💾 Sistem Sağlığı & Bağlantılar
+              2. 💾 Sistem Sağlığı & Bağlantılar
             </h2>
           </div>
 
@@ -376,13 +300,13 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 5. 📱 Evolution API Bağlantı Ayarları (ff) */}
+        {/* 3. 📱 Evolution API Bağlantı Ayarları (ff) */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
             <div className="flex items-center gap-2">
               <Wifi className="w-5 h-5 text-[#d4af37]" />
               <h2 className="text-sm font-bold text-white font-serif-title">
-                5. 📱 Evolution API Bağlantı Ayarları (Instance: ff)
+                3. 📱 Evolution API Bağlantı Ayarları (Instance: ff)
               </h2>
             </div>
 
@@ -482,13 +406,13 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 6. 🔗 Webhook Ayarı */}
+        {/* 4. 🔗 Webhook Ayarı */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#23292e]">
             <div className="flex items-center gap-2">
               <LinkIcon className="w-5 h-5 text-[#10b981]" />
               <h2 className="text-sm font-bold text-white font-serif-title">
-                6. 🔗 Webhook Ayarı
+                4. 🔗 Webhook Ayarı
               </h2>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -527,12 +451,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 7. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler */}
+        {/* 5. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Clock className="w-5 h-5 text-[#d4af37]" />
             <h2 className="text-sm font-bold text-white font-serif-title">
-              7. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler
+              5. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler
             </h2>
           </div>
 
@@ -654,12 +578,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 8. 🗄️ Veri Yedekleme & Geri Yükleme */}
+        {/* 6. 🗄️ Veri Yedekleme & Geri Yükleme */}
         <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
             <Database className="w-5 h-5 text-[#d4af37]" />
             <h2 className="text-sm font-bold text-white font-serif-title">
-              8. 🗄️ Veri Yedekleme & Geri Yükleme
+              6. 🗄️ Veri Yedekleme & Geri Yükleme
             </h2>
           </div>
 

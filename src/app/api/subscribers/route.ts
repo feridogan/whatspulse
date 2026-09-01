@@ -3,6 +3,8 @@ import prisma from "@/lib/prisma";
 import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { requireAuth } from "@/lib/auth";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     await ensureDbSchemaSync();
@@ -11,7 +13,7 @@ export async function GET(req: NextRequest) {
     const filter = searchParams.get("filter") || "ALL"; // ALL, INTERACTIVE, ACTIVE, BLACKLIST
     const groupId = searchParams.get("groupId") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = parseInt(searchParams.get("limit") || "10000", 10);
 
     const where: any = {};
 
@@ -34,7 +36,7 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    const [subscribers, total] = await Promise.all([
+    let [subscribers, total] = await Promise.all([
       prisma.subscriber.findMany({
         where,
         include: {
@@ -48,12 +50,28 @@ export async function GET(req: NextRequest) {
             select: { domains: true, orders: true, notifications: true }
           }
         },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
+        orderBy: { name: "asc" },
+        skip: limit >= 10000 ? 0 : (page - 1) * limit,
         take: limit,
       }),
       prisma.subscriber.count({ where }),
     ]);
+
+    // If Subscriber table is empty or has fewer contacts, mirror from Contact
+    if (subscribers.length === 0 && !search && filter === 'ALL' && (!groupId || groupId === 'ALL')) {
+      const contacts = await prisma.contact.findMany({
+        orderBy: { name: "asc" },
+        include: {
+          groups: {
+            include: { group: true }
+          }
+        }
+      });
+      if (contacts.length > 0) {
+        subscribers = contacts as any;
+        total = contacts.length;
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -76,68 +94,77 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, phone, email, company, notes, channels, preferredTime, language, groupIds, isActive, isInteractive } = body;
+    const { 
+      name, 
+      phone, 
+      email, 
+      company, 
+      notes, 
+      categories, 
+      contentDetails, 
+      preferredTime, 
+      language, 
+      groupIds, 
+      isActive, 
+      isInteractive 
+    } = body;
 
     if (!name || !phone) {
       return NextResponse.json({ success: false, error: "İsim ve telefon numarası zorunludur." }, { status: 400 });
     }
 
-    let cleanPhone = "+" + phone.replace(/\D/g, "");
-    if (cleanPhone.length < 10) {
-      return NextResponse.json({ success: false, error: "Geçerli bir telefon numarası giriniz." }, { status: 400 });
-    }
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
 
     const subscriber = await prisma.subscriber.upsert({
       where: { phone: cleanPhone },
       update: {
-        name: name.trim(),
-        email: email ? email.trim() : null,
-        company: company ? company.trim() : null,
-        notes: notes ? notes.trim() : null,
-        channels: channels || ["WhatsApp"],
+        name,
+        email: email || null,
+        company: company || null,
+        notes: notes || null,
         preferredTime: preferredTime || "08:00",
         language: language || "TR",
-        isActive: isActive !== undefined ? Boolean(isActive) : true,
-        isInteractive: isInteractive !== undefined ? Boolean(isInteractive) : false,
+        isActive: isActive !== undefined ? isActive : true,
+        isInteractive: isInteractive || false,
       },
       create: {
-        name: name.trim(),
+        name,
         phone: cleanPhone,
-        email: email ? email.trim() : null,
-        company: company ? company.trim() : null,
-        notes: notes ? notes.trim() : null,
-        channels: channels || ["WhatsApp"],
+        email: email || null,
+        company: company || null,
+        notes: notes || null,
         preferredTime: preferredTime || "08:00",
         language: language || "TR",
-        isActive: isActive !== undefined ? Boolean(isActive) : true,
-        isInteractive: isInteractive !== undefined ? Boolean(isInteractive) : false,
+        isActive: isActive !== undefined ? isActive : true,
+        isInteractive: isInteractive || false,
       }
     });
 
-    // Also update Contact table for backward compatibility
+    // Also mirror to Contact table
     await prisma.contact.upsert({
       where: { phone: cleanPhone },
-      update: { name: name.trim(), email: email || null, notes: notes || null },
-      create: { name: name.trim(), phone: cleanPhone, email: email || null, notes: notes || null }
+      update: { name, email: email || null, notes: notes || null },
+      create: { name, phone: cleanPhone, email: email || null, notes: notes || null }
     }).catch(() => {});
 
-    // Assign groups if provided
-    if (Array.isArray(groupIds) && groupIds.length > 0) {
+    // Update group mappings if provided
+    if (groupIds && Array.isArray(groupIds)) {
+      await prisma.subscriberGroup.deleteMany({
+        where: { subscriberId: subscriber.id }
+      });
+
       for (const gId of groupIds) {
-        await prisma.subscriberGroup.upsert({
-          where: { subscriberId_groupId: { subscriberId: subscriber.id, groupId: gId } },
-          update: {},
-          create: { subscriberId: subscriber.id, groupId: gId }
+        await prisma.subscriberGroup.create({
+          data: { subscriberId: subscriber.id, groupId: gId }
         }).catch(() => {});
       }
     }
 
-    const updated = await prisma.subscriber.findUnique({
-      where: { id: subscriber.id },
-      include: { groups: { include: { group: true } }, domains: true }
+    return NextResponse.json({
+      success: true,
+      subscriber,
+      message: "Abone başarıyla kaydedildi."
     });
-
-    return NextResponse.json({ success: true, subscriber: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

@@ -10,7 +10,6 @@ import {
   Users, 
   Calendar, 
   FolderTree, 
-  BarChart3, 
   Settings, 
   LogOut,
   ShieldCheck,
@@ -27,7 +26,6 @@ export function Sidebar() {
     { href: '/subscribers', label: 'Aboneler / Kişiler', icon: Users, badge: 'Rehber' },
     { href: '/special-days', label: 'Özel Günler', icon: Calendar },
     { href: '/groups', label: 'Gruplar', icon: FolderTree },
-    { href: '/reports', label: 'Raporlar', icon: BarChart3 },
     { href: '/settings', label: 'Ayarlar', icon: Settings },
   ];
 
