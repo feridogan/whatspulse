@@ -72,6 +72,8 @@ model Subscriber {
   isActive      Boolean           @default(true)
   isInteractive Boolean           @default(false)
   isBlacklisted Boolean           @default(false)
+  avatar        String?
+  isCustomName  Boolean           @default(false)
   lastSentAt    DateTime?
   customFields  Json?             @default("{}")
   createdAt     DateTime          @default(now())
@@ -184,6 +186,8 @@ model Contact {
   email         String?
   notes         String?
   isBlacklisted Boolean        @default(false)
+  avatar        String?
+  isCustomName  Boolean        @default(false)
   customFields  Json?          @default("{}")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt

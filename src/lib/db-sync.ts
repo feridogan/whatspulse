@@ -147,6 +147,21 @@ export async function ensureDbSchemaSync() {
           ALTER TABLE "Campaign" ADD COLUMN "scheduledAt" TIMESTAMP(3);
         END IF;
 
+        -- 11. Add avatar and isCustomName columns to Contact and Subscriber tables
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Contact' AND column_name='avatar') THEN
+          ALTER TABLE "Contact" ADD COLUMN "avatar" TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Contact' AND column_name='isCustomName') THEN
+          ALTER TABLE "Contact" ADD COLUMN "isCustomName" BOOLEAN DEFAULT false;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Subscriber' AND column_name='avatar') THEN
+          ALTER TABLE "Subscriber" ADD COLUMN "avatar" TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Subscriber' AND column_name='isCustomName') THEN
+          ALTER TABLE "Subscriber" ADD COLUMN "isCustomName" BOOLEAN DEFAULT false;
+        END IF;
+
         BEGIN
           ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';
         EXCEPTION WHEN duplicate_object THEN NULL;
