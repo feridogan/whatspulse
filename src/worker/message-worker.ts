@@ -54,6 +54,13 @@ export const messageWorker = new Worker<CampaignMessageJobData>(
           const chk = await prisma.campaign.findUnique({ where: { id: data.campaignId } });
           if (chk?.status === 'CANCELLED') return { skipped: true, reason: 'Cancelled while waiting for schedule' };
         }
+
+        if (campaign.status === 'SCHEDULED') {
+          await prisma.campaign.update({
+            where: { id: data.campaignId },
+            data: { status: 'PROCESSING', startedAt: new Date() },
+          });
+        }
       }
 
       if (campaign.status === 'PAUSED') {

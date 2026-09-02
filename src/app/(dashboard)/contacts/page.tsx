@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { 
   Users, 
   UserPlus, 
@@ -29,7 +30,8 @@ import {
   UserCheck,
   UserMinus,
   RotateCcw,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -62,6 +64,8 @@ export default function ContactsPage() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [showSuggestDropdown, setShowSuggestDropdown] = useState(false);
   const [addingContactId, setAddingContactId] = useState<string | null>(null);
+  const [syncingContactId, setSyncingContactId] = useState<string | null>(null);
+  const [syncedSuccessIds, setSyncedSuccessIds] = useState<string[]>([]);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Toast Notification
@@ -327,6 +331,41 @@ export default function ContactsPage() {
       }
     } catch (err: any) {
       alert('Hata: ' + err.message);
+    }
+  };
+
+  // Sync Single Contact with WhatsApp
+  const handleSyncSingleContact = async (contactId: string) => {
+    try {
+      setSyncingContactId(contactId);
+      const res = await fetch('/api/contacts/sync-single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.contact) {
+          setContacts((prev) =>
+            prev.map((c) => (c.id === contactId ? { ...c, ...data.contact } : c))
+          );
+        }
+        setSyncedSuccessIds((prev) => [...prev, contactId]);
+        setTimeout(() => {
+          setSyncedSuccessIds((prev) => prev.filter((id) => id !== contactId));
+        }, 3000);
+        showToast(
+          data.updatedFields?.name || data.updatedFields?.avatar
+            ? `WhatsApp verileri güncellendi: ${data.contact?.name || ''}`
+            : 'WhatsApp verisi çekildi (Kişi bilgileri zaten güncel).'
+        );
+      } else {
+        showToast(data.error || 'WhatsApp verisi çekilemedi.', 'error');
+      }
+    } catch (err: any) {
+      showToast('Senkronizasyon hatası: ' + err.message, 'error');
+    } finally {
+      setSyncingContactId(null);
     }
   };
 
@@ -1058,11 +1097,27 @@ export default function ContactsPage() {
                         {/* Name & Avatar */}
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
-                              {c.name?.slice(0, 2).toUpperCase() || 'K'}
-                            </div>
+                            {c.avatar ? (
+                              <img
+                                src={c.avatar}
+                                alt={c.name}
+                                className="w-9 h-9 rounded-xl object-cover border border-emerald-500/30 shrink-0"
+                                onError={(e: any) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
+                                {c.name?.slice(0, 2).toUpperCase() || 'K'}
+                              </div>
+                            )}
                             <div className="min-w-0">
-                              <div className="font-bold text-white text-sm truncate">{c.name}</div>
+                              <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
+                                <span>{c.name}</span>
+                                {c.avatar && (
+                                  <span className="text-[10px] text-emerald-400 font-mono" title="WhatsApp Profili Doğrulandı">✓</span>
+                                )}
+                              </div>
                               {c.email && (
                                 <div className="text-[11px] text-gray-400 truncate">{c.email}</div>
                               )}
@@ -1138,16 +1193,51 @@ export default function ContactsPage() {
                         {/* Actions */}
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* 🔄 WhatsApp Verisini Çek / Kişiyi Güncelle */}
                             <button
+                              type="button"
+                              onClick={() => handleSyncSingleContact(c.id)}
+                              disabled={syncingContactId === c.id}
+                              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                                syncedSuccessIds.includes(c.id)
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-transparent'
+                              }`}
+                              title="Bu Kişiyi Güncelle / WhatsApp Verisini Çek"
+                            >
+                              {syncingContactId === c.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                              ) : syncedSuccessIds.includes(c.id) ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            {/* 💬 Doğrudan Sohbet Başlat */}
+                            <Link
+                              href={`/chat?phone=${encodeURIComponent(c.phone)}`}
+                              className="p-2 rounded-xl text-[#d4af37] hover:text-yellow-300 hover:bg-yellow-500/10 transition-colors"
+                              title="Canlı Sohbet Başlat / Mesaj Gönder"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </Link>
+
+                            {/* ✏️ Düzenle */}
+                            <button
+                              type="button"
                               onClick={() => handleOpenContactModal(c)}
-                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
                               title="Düzenle"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
+
+                            {/* 🗑️ Rehberden Sil */}
                             <button
+                              type="button"
                               onClick={() => handleDeleteContact(c.id)}
-                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
                               title="Rehberden Sil"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

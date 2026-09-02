@@ -166,6 +166,16 @@ export async function ensureDbSchemaSync() {
           ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';
         EXCEPTION WHEN duplicate_object THEN NULL;
         END;
+
+        BEGIN
+          ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'PENDING';
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END;
+
+        BEGIN
+          ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'RUNNING';
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END;
       END $$;
     `);
 

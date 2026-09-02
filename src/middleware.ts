@@ -71,6 +71,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/images') ||
     pathname.startsWith('/icons') ||
     pathname.startsWith('/api/webhook') ||
+    pathname.startsWith('/api/cron') ||
     pathname === '/favicon.ico' ||
     pathname === '/manifest.json' ||
     pathname === '/sw.js'

@@ -14,8 +14,10 @@ enum Role {
 
 enum CampaignStatus {
   DRAFT
+  PENDING
   QUEUED
   PROCESSING
+  RUNNING
   PAUSED
   SCHEDULED
   COMPLETED

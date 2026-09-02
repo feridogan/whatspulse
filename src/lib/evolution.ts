@@ -225,6 +225,59 @@ export class EvolutionService {
     }
   }
 
+  /**
+   * Fetch WhatsApp Profile Picture URL for a phone number
+   */
+  static async fetchProfilePictureUrl(phone: string, customName?: string): Promise<string | null> {
+    try {
+      const { client, instance } = await getClient(customName);
+      const cleanNumber = phone.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+      const res = await client.post(`/chat/fetchProfilePictureUrl/${encodeURIComponent(instance)}`, {
+        number: cleanNumber,
+      });
+      return res.data?.profilePictureUrl || res.data?.picture || res.data?.url || null;
+    } catch (e: any) {
+      console.warn(`[Evolution Profile Pic]: ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch WhatsApp Contact Profile & Name info
+   */
+  static async fetchContactInfo(phone: string, customName?: string): Promise<{ pushName?: string | null; profilePicUrl?: string | null }> {
+    try {
+      const { client, instance } = await getClient(customName);
+      const cleanNumber = phone.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+      
+      let pushName: string | null = null;
+      let profilePicUrl: string | null = null;
+
+      // 1. Try fetch profile picture
+      try {
+        const picRes = await client.post(`/chat/fetchProfilePictureUrl/${encodeURIComponent(instance)}`, {
+          number: cleanNumber,
+        });
+        profilePicUrl = picRes.data?.profilePictureUrl || picRes.data?.picture || picRes.data?.url || null;
+      } catch (err) {}
+
+      // 2. Try findContact
+      try {
+        const contactRes = await client.post(`/chat/findContact/${encodeURIComponent(instance)}`, {
+          number: cleanNumber,
+        });
+        pushName = contactRes.data?.pushName || contactRes.data?.name || contactRes.data?.verifiedName || null;
+        if (!profilePicUrl) {
+          profilePicUrl = contactRes.data?.profilePictureUrl || contactRes.data?.profilePicUrl || null;
+        }
+      } catch (err) {}
+
+      return { pushName, profilePicUrl };
+    } catch (e: any) {
+      return { pushName: null, profilePicUrl: null };
+    }
+  }
+
   static async logout(customName?: string) {
     return this.logoutInstance(customName);
   }
