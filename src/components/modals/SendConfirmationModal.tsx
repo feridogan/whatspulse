@@ -38,6 +38,8 @@ interface SendConfirmationModalProps {
   initialRecipients: RecipientItem[];
   minDelay: number;
   maxDelay: number;
+  scheduledAt?: string | null;
+  deliveryWindow?: { start: string; end: string };
   onConfirm: (finalRecipients: RecipientItem[]) => void;
   isLaunching?: boolean;
 }
@@ -51,6 +53,8 @@ export function SendConfirmationModal({
   initialRecipients,
   minDelay,
   maxDelay,
+  scheduledAt,
+  deliveryWindow = { start: "08:00", end: "18:00" },
   onConfirm,
   isLaunching = false,
 }: SendConfirmationModalProps) {
@@ -163,6 +167,25 @@ export function SendConfirmationModal({
               Bu işlem, seçtiğiniz <strong className="text-[#d4af37] font-semibold">{groupNames.join(", ")}</strong> grubundaki{" "}
               <strong className="text-[#10b981] font-mono font-bold">{recipients.length} kişiye</strong> sırayla WhatsApp mesajı gönderecektir. Genel rehberdeki diğer abonelere kesinlikle mesaj gönderilmez.
             </div>
+          </div>
+
+          {/* Delivery Window & Scheduled Info Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-[#161a1d] border border-[#2e353c] text-xs">
+            <div className="flex items-center gap-2 text-gray-300">
+              <Clock className="w-4 h-4 text-[#d4af37]" />
+              <span>
+                <strong>Zaman Penceresi Koruması:</strong> Mesajlar sadece <strong>{deliveryWindow.start} - {deliveryWindow.end}</strong> saatleri arasında iletilir.
+              </span>
+            </div>
+            {scheduledAt ? (
+              <span className="bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30 px-2.5 py-0.5 rounded-full font-mono text-[11px] font-bold">
+                ⏰ Planlanan Başlangıç: {new Date(scheduledAt).toLocaleString("tr-TR")}
+              </span>
+            ) : (
+              <span className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 px-2.5 py-0.5 rounded-full font-mono text-[11px] font-bold">
+                🚀 Hemen Başlatılacak
+              </span>
+            )}
           </div>
 
           {/* Quick Metrics Grid */}

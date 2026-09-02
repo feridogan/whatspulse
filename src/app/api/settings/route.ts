@@ -17,7 +17,10 @@ export async function GET(req: NextRequest) {
       settingsMap[s.key] = s.value;
     });
 
-    return NextResponse.json(settingsMap);
+    return NextResponse.json({
+      settings: settingsMap,
+      ...settingsMap,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -31,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { key, value, action } = body;
+    const { key, value, action, settings: nestedSettings } = body;
 
     if (action === 'register_webhook') {
       const webhookUrl = value?.webhookUrl || `${process.env.APP_URL || 'https://mesaj.cakirlar.net'}/api/webhook/evolution`;
@@ -39,17 +42,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Webhook başarıyla kaydedildi!', result });
     }
 
-    if (!key || value === undefined) {
-      return NextResponse.json({ error: 'Key ve value gereklidir.' }, { status: 400 });
+    // 1. Single Key-Value save
+    if (key && value !== undefined) {
+      const setting = await prisma.setting.upsert({
+        where: { key },
+        update: { value },
+        create: { key, value },
+      });
+      return NextResponse.json({ success: true, setting });
     }
 
-    const setting = await prisma.setting.upsert({
-      where: { key },
-      update: { value },
-      create: { key, value },
-    });
+    // 2. Batch Settings Dictionary save
+    const settingsToSave = nestedSettings || body;
+    if (typeof settingsToSave === 'object' && settingsToSave !== null) {
+      const entries = Object.entries(settingsToSave).filter(([k]) => k !== 'action');
+      for (const [k, v] of entries) {
+        if (v !== undefined) {
+          await prisma.setting.upsert({
+            where: { key: k },
+            update: { value: v },
+            create: { key: k, value: v },
+          });
+        }
+      }
+      return NextResponse.json({ success: true, message: 'Ayarlar başarıyla kaydedildi.' });
+    }
 
-    return NextResponse.json({ success: true, setting });
+    return NextResponse.json({ error: 'Kaydedilecek ayar bulunamadı.' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

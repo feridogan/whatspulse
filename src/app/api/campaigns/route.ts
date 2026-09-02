@@ -183,12 +183,16 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
+    const scheduledDate = body.scheduledAt ? new Date(body.scheduledAt) : null;
+    const isFutureScheduled = Boolean(scheduledDate && scheduledDate.getTime() > Date.now());
+    const initialDelayMs = isFutureScheduled && scheduledDate ? Math.max(0, scheduledDate.getTime() - Date.now()) : 0;
+
     // 2. Create Campaign Record
     const campaign = await prisma.campaign.create({
       data: {
         title: title.trim(),
         templateId: templateId || null,
-        status: 'PROCESSING',
+        status: isFutureScheduled ? 'SCHEDULED' : 'PROCESSING',
         totalCount: finalContacts.length,
         sentCount: 0,
         failedCount: 0,
@@ -196,7 +200,8 @@ export async function POST(req: NextRequest) {
         maxDelay: Number(maxDelay) || 20,
         batchSize: Number(batchSize) || 25,
         batchPause: Number(batchPause) || 60,
-        startedAt: new Date(),
+        scheduledAt: scheduledDate,
+        startedAt: isFutureScheduled ? null : new Date(),
       },
     });
 
@@ -267,6 +272,7 @@ export async function POST(req: NextRequest) {
         },
         {
           jobId: messageRecord.id,
+          delay: initialDelayMs,
         }
       );
     }

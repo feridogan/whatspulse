@@ -48,17 +48,30 @@ export default function SettingsPage() {
   const [loadingQr, setLoadingQr] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // 5. Otomatik Gönderim Görevleri & Tetikleyiciler
+  // 5. Otomatik Gönderim Sessiz Saatleri & Zaman Penceresi (Delivery Window & Quiet Hours Guard)
   const [morningActive, setMorningActive] = useState(true);
   const [morningTime, setMorningTime] = useState("08:00");
   const [eveningActive, setEveningActive] = useState(true);
   const [eveningTime, setEveningTime] = useState("20:00");
   const [fridayActive, setFridayActive] = useState(true);
   const [fridayTime, setFridayTime] = useState("10:00");
-  const [quietHoursStart, setQuietHoursStart] = useState("21:00");
-  const [quietHoursEnd, setQuietHoursEnd] = useState("08:30");
+
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState("08:00");
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("18:00");
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(true);
+  const [allowedDays, setAllowedDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
   const [minDelay, setMinDelay] = useState(5);
   const [maxDelay, setMaxDelay] = useState(15);
+
+  const toggleAllowedDay = (day: number) => {
+    setAllowedDays((prev) =>
+      prev.includes(day)
+        ? prev.length > 1
+          ? prev.filter((d) => d !== day)
+          : prev
+        : [...prev, day]
+    );
+  };
 
   const loadSettings = async () => {
     try {
@@ -70,16 +83,25 @@ export default function SettingsPage() {
       const setData = await setRes.json();
       const evoData = await evoRes.json();
 
-      if (setData.settings) {
-        const s = setData.settings;
+      const s = setData.settings || setData;
+      if (s) {
         if (s.system_active !== undefined) setSystemActive(s.system_active === "true" || s.system_active === true);
         if (s.interactive_mode !== undefined) setInteractiveModeOnly(s.interactive_mode === "true" || s.interactive_mode === true);
         if (s.evolution_api_url) setEvoUrl(s.evolution_api_url);
         if (s.evolution_global_key) setEvoApiKey(s.evolution_global_key);
         if (s.evolution_instance) setEvoInstance(s.evolution_instance);
         if (s.webhook_url) setWebhookUrl(s.webhook_url);
-        if (s.quiet_hours_start) setQuietHoursStart(s.quiet_hours_start);
-        if (s.quiet_hours_end) setQuietHoursEnd(s.quiet_hours_end);
+        if (s.delivery_window_start) setDeliveryWindowStart(s.delivery_window_start);
+        else if (s.quiet_hours_start) setDeliveryWindowStart(s.quiet_hours_start);
+        if (s.delivery_window_end) setDeliveryWindowEnd(s.delivery_window_end);
+        else if (s.quiet_hours_end) setDeliveryWindowEnd(s.quiet_hours_end);
+        if (s.quiet_hours_enabled !== undefined) setQuietHoursEnabled(s.quiet_hours_enabled === "true" || s.quiet_hours_enabled === true);
+        if (s.allowed_days) {
+          try {
+            const parsed = typeof s.allowed_days === "string" ? JSON.parse(s.allowed_days) : s.allowed_days;
+            if (Array.isArray(parsed) && parsed.length > 0) setAllowedDays(parsed.map(Number));
+          } catch (e) {}
+        }
         if (s.min_delay) setMinDelay(Number(s.min_delay));
         if (s.max_delay) setMaxDelay(Number(s.max_delay));
       }
@@ -113,8 +135,12 @@ export default function SettingsPage() {
       morning_time: morningTime,
       evening_time: eveningTime,
       friday_time: fridayTime,
-      quiet_hours_start: quietHoursStart,
-      quiet_hours_end: quietHoursEnd,
+      delivery_window_start: deliveryWindowStart,
+      delivery_window_end: deliveryWindowEnd,
+      quiet_hours_start: deliveryWindowStart,
+      quiet_hours_end: deliveryWindowEnd,
+      quiet_hours_enabled: String(quietHoursEnabled),
+      allowed_days: JSON.stringify(allowedDays),
       min_delay: String(minDelay),
       max_delay: String(maxDelay),
     };
@@ -451,129 +477,153 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 5. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-[#23292e]">
-            <Clock className="w-5 h-5 text-[#d4af37]" />
-            <h2 className="text-sm font-bold text-white font-serif-title">
-              5. ⏰ Otomatik Gönderim Görevleri & Tetikleyiciler
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Sabah Bildirimi</span>
-                <input
-                  type="checkbox"
-                  checked={morningActive}
-                  onChange={(e) => setMorningActive(e.target.checked)}
-                  className="w-4 h-4 accent-[#d4af37]"
-                />
+        {/* 5. 🛡️ Otomatik Gönderim Sessiz Saatleri & Zaman Penceresi (Delivery Window & Quiet Hours Guard) */}
+        <div className="p-5 sm:p-6 rounded-3xl bg-[#121517] border border-[#23292e] shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#23292e]">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-[#10b981]" />
+              <div>
+                <h2 className="text-sm font-bold text-white font-serif-title">
+                  5. 🛡️ Otomatik Gönderim Sessiz Saatleri & Zaman Penceresi Motoru
+                </h2>
+                <p className="text-[11px] text-gray-400">
+                  Mesaj gönderim izin saatleri, gece sessiz saatler koruması ve gün filtreleri.
+                </p>
               </div>
-              <div className="text-[11px] text-gray-400">Hedef Grup: Tüm Aboneler</div>
-              <input
-                type="time"
-                value={morningTime}
-                onChange={(e) => setMorningTime(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-              />
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#d4af37] font-serif-title">Akşam Bildirimi</span>
+            {/* Strict Quiet Hours Guard Switch */}
+            <div className="flex items-center gap-3 bg-[#161a1d] px-3.5 py-1.5 rounded-2xl border border-[#2e353c]">
+              <span className="text-xs font-bold text-gray-200">Sessiz Saatler Koruması</span>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={eveningActive}
-                  onChange={(e) => setEveningActive(e.target.checked)}
-                  className="w-4 h-4 accent-[#d4af37]"
+                  checked={quietHoursEnabled}
+                  onChange={(e) => setQuietHoursEnabled(e.target.checked)}
+                  className="sr-only peer"
                 />
-              </div>
-              <div className="text-[11px] text-gray-400">Hedef Grup: Tüm Aboneler</div>
-              <input
-                type="time"
-                value={eveningTime}
-                onChange={(e) => setEveningTime(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-              />
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#10b981] font-serif-title">Cuma Özel Tebriği</span>
-                <input
-                  type="checkbox"
-                  checked={fridayActive}
-                  onChange={(e) => setFridayActive(e.target.checked)}
-                  className="w-4 h-4 accent-[#10b981]"
-                />
-              </div>
-              <div className="text-[11px] text-gray-400">Hedef Grup: Tüm Aboneler</div>
-              <input
-                type="time"
-                value={fridayTime}
-                onChange={(e) => setFridayTime(e.target.value)}
-                className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-              />
+                <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10b981]"></div>
+              </label>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
+          {/* Info Banner */}
+          <div className="p-3.5 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/25 flex items-start gap-2.5 text-xs text-gray-200">
+            <Sparkles className="w-4 h-4 text-[#10b981] shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong>Zaman Penceresi Kuralı:</strong> Mesajlar sadece aşağıda belirlenen saat aralığında (<strong>{deliveryWindowStart} - {deliveryWindowEnd}</strong>) ve seçili günlerde iletilir. Sessiz saatler (akşam {deliveryWindowEnd} ile sabah {deliveryWindowStart} arası) başladığında tüm gönderimler güvenle uyku moduna geçer, sabah {deliveryWindowStart}&apos;da kaldığı kişiden otomatik devam eder.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Kural 1: Gönderim İzin Aralığı */}
+            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-3">
               <div className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5 font-serif-title">
                 <Clock className="w-4 h-4 text-[#d4af37]" />
-                <span>Sessiz Saatler (21:00 - 08:30)</span>
+                <span>Kural 1: Gönderim İzin Aralığı (Delivery Window)</span>
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <p className="text-[11px] text-gray-400">
+                Toplu mesajların müşterilere ulaştırılmasına izin verilen günlük zaman penceresi.
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="text-[10px] text-gray-400 block">Başlangıç</label>
+                  <label className="text-[10px] text-gray-400 block font-mono mb-1">Başlangıç Saati</label>
                   <input
                     type="time"
-                    value={quietHoursStart}
-                    onChange={(e) => setQuietHoursStart(e.target.value)}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                    value={deliveryWindowStart}
+                    onChange={(e) => setDeliveryWindowStart(e.target.value)}
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-[#d4af37]"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-gray-400 block">Bitiş</label>
+                  <label className="text-[10px] text-gray-400 block font-mono mb-1">Bitiş Saati</label>
                   <input
                     type="time"
-                    value={quietHoursEnd}
-                    onChange={(e) => setQuietHoursEnd(e.target.value)}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                    value={deliveryWindowEnd}
+                    onChange={(e) => setDeliveryWindowEnd(e.target.value)}
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-[#d4af37]"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-2">
+            {/* Kural 4: Anti-Spam Rastgele Gecikme */}
+            <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-3">
               <div className="text-xs font-bold text-[#10b981] flex items-center gap-1.5 font-serif-title">
                 <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-                <span>Anti-Spam Gecikmesi</span>
+                <span>Kural 4: Anti-Spam İnsansı Gecikme Aralığı</span>
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <p className="text-[11px] text-gray-400">
+                Her WhatsApp mesajı arasına eklenecek değişken gecikme süresi (Saniye).
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="text-[10px] text-gray-400 block">Min Gecikme (5 sn)</label>
+                  <label className="text-[10px] text-gray-400 block font-mono mb-1">Min Gecikme (sn)</label>
                   <input
                     type="number"
                     min={2}
+                    max={60}
                     value={minDelay}
                     onChange={(e) => setMinDelay(Number(e.target.value))}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-[#10b981]"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-gray-400 block">Max Gecikme (15 sn)</label>
+                  <label className="text-[10px] text-gray-400 block font-mono mb-1">Max Gecikme (sn)</label>
                   <input
                     type="number"
                     min={minDelay}
+                    max={120}
                     value={maxDelay}
                     onChange={(e) => setMaxDelay(Number(e.target.value))}
-                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                    className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-[#10b981]"
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Kural 3: İzin Verilen Günler (Haftalık Seçim) */}
+          <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#2e353c] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-white flex items-center gap-1.5 font-serif-title">
+                <Activity className="w-4 h-4 text-[#d4af37]" />
+                <span>Kural 3: İzin Verilen Gönderim Günleri (Haftalık Koruma)</span>
+              </div>
+              <span className="text-[11px] text-gray-400">
+                {allowedDays.length} Gün Aktif
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Seçili olmayan günlerde (Örn. Pazar) sistem toplu mesaj gönderimini tamamen bloke eder ve bekletir.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-1">
+              {[
+                { day: 1, name: "Pazartesi", short: "Pzt" },
+                { day: 2, name: "Salı", short: "Sal" },
+                { day: 3, name: "Çarşamba", short: "Çar" },
+                { day: 4, name: "Perşembe", short: "Per" },
+                { day: 5, name: "Cuma", short: "Cum" },
+                { day: 6, name: "Cumartesi", short: "Cmt" },
+                { day: 0, name: "Pazar", short: "Paz" },
+              ].map((d) => {
+                const isSelected = allowedDays.includes(d.day);
+                return (
+                  <button
+                    key={d.day}
+                    type="button"
+                    onClick={() => toggleAllowedDay(d.day)}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all border cursor-pointer flex flex-col items-center justify-center ${
+                      isSelected
+                        ? "bg-[#10b981]/20 border-[#10b981] text-[#10b981] shadow-sm"
+                        : "bg-[#181c1f] border-[#2e353c] text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <span>{d.short}</span>
+                    <span className="text-[10px] font-normal opacity-75">{d.name}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

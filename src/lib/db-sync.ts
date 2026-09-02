@@ -138,6 +138,19 @@ export async function ensureDbSchemaSync() {
 
         -- 9. Clean up legacy default seed groups if they exist
         DELETE FROM "Group" WHERE "name" IN ('Tüm Müşteriler', 'VIP Müşteriler', 'Potansiyel Müşteriler', 'Personel / Ekip');
+
+        -- 10. Add scheduledAt and SCHEDULED enum to Campaign table
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='Campaign' AND column_name='scheduledAt'
+        ) THEN
+          ALTER TABLE "Campaign" ADD COLUMN "scheduledAt" TIMESTAMP(3);
+        END IF;
+
+        BEGIN
+          ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END;
       END $$;
     `);
 

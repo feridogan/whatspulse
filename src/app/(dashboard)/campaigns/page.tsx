@@ -47,12 +47,18 @@ function CampaignsContent() {
   const [previewGroupNames, setPreviewGroupNames] = useState<string[]>([]);
   const [fetchingPreview, setFetchingPreview] = useState(false);
 
+  // Delivery Window & Quiet Hours Settings State
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState("08:00");
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("18:00");
+
   // Wizard State
   const [wizardStep, setWizardStep] = useState(1);
   const [campaignTitle, setCampaignTitle] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState(preselectedTemplateId || "");
   const [customMessage, setCustomMessage] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [scheduleMode, setScheduleMode] = useState<"now" | "later">("now");
+  const [scheduledAt, setScheduledAt] = useState("");
   const [minDelay, setMinDelay] = useState(5);
   const [maxDelay, setMaxDelay] = useState(15);
   const [batchSize, setBatchSize] = useState(25);
@@ -74,20 +80,30 @@ function CampaignsContent() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [campRes, tplRes, grpRes] = await Promise.all([
+      const [campRes, tplRes, grpRes, setRes] = await Promise.all([
         fetch("/api/campaigns"),
         fetch("/api/templates"),
         fetch("/api/groups"),
+        fetch("/api/settings"),
       ]);
 
       const campData = await campRes.json();
       const tplData = await tplRes.json();
       const grpData = await grpRes.json();
+      const setData = await setRes.json();
 
       if (Array.isArray(campData)) setCampaigns(campData);
       if (Array.isArray(tplData)) setTemplates(tplData);
-      if (Array.isArray(grpData)) {
-        setGroups(grpData);
+      if (Array.isArray(grpData)) setGroups(grpData);
+
+      const s = setData?.settings || setData;
+      if (s) {
+        if (s.delivery_window_start) setDeliveryWindowStart(s.delivery_window_start);
+        else if (s.quiet_hours_start) setDeliveryWindowStart(s.quiet_hours_start);
+        if (s.delivery_window_end) setDeliveryWindowEnd(s.delivery_window_end);
+        else if (s.quiet_hours_end) setDeliveryWindowEnd(s.quiet_hours_end);
+        if (s.min_delay) setMinDelay(Number(s.min_delay));
+        if (s.max_delay) setMaxDelay(Number(s.max_delay));
       }
     } catch (err) {
       console.error(err);
@@ -213,6 +229,7 @@ function CampaignsContent() {
           recipients: confirmedRecipients,
           groupIds: selectedGroups,
           targetGroupIds: selectedGroups,
+          scheduledAt: scheduleMode === "later" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
           minDelay: Number(minDelay),
           maxDelay: Number(maxDelay),
           batchSize: Number(batchSize),
@@ -228,6 +245,8 @@ function CampaignsContent() {
         setCampaignTitle("");
         setCustomMessage("");
         setSelectedGroups([]);
+        setScheduleMode("now");
+        setScheduledAt("");
         loadData();
       } else {
         alert(data.error || "Kampanya başlatılamadı.");
@@ -598,14 +617,84 @@ function CampaignsContent() {
               </div>
             )}
 
-            {/* Step 3: Anti-Spam & Gecikme */}
+            {/* Step 3: Anti-Spam, Gecikme & Zamanlama */}
             {wizardStep === 3 && (
               <div className="space-y-4 flex-1 overflow-y-auto">
-                <div className="p-3.5 rounded-2xl bg-[#121517] border border-[#10b981]/30 flex items-center gap-2.5 text-xs text-[#10b981]">
-                  <ShieldCheck className="w-5 h-5 text-[#10b981] shrink-0" />
-                  <span>
-                    WhatsApp algoritmasının spam korumasını aşmak için mesajlar arasında dinamik insansı bekleme uygulanır.
-                  </span>
+                {/* Delivery Window & Quiet Hours Info Banner */}
+                <div className="p-3.5 rounded-2xl bg-[#10b981]/15 border border-[#10b981]/30 flex items-start gap-2.5 text-xs text-gray-200">
+                  <ShieldCheck className="w-5 h-5 text-[#10b981] shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-white font-bold block mb-0.5">
+                      🛡️ Zaman Kuralı & Sessiz Saatler Koruma Motoru Devrede:
+                    </strong>
+                    Mesajlar sadece <strong>{deliveryWindowStart} - {deliveryWindowEnd}</strong> saatleri arasında iletilir. Bu saat dışında kalan gönderimler sabah {deliveryWindowStart}&apos;a kadar güvenle duraklatılır ve müşterilere gece mesaj gitmez.
+                  </div>
+                </div>
+
+                {/* Gönderim Zamanı Planı */}
+                <div className="p-4 rounded-2xl bg-[#161a1d] border border-[#23292e] space-y-3">
+                  <label className="text-xs font-bold text-[#d4af37] uppercase font-serif-title flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#d4af37]" />
+                    <span>Gönderim Zamanı Planı</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div
+                      onClick={() => setScheduleMode("now")}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
+                        scheduleMode === "now"
+                          ? "bg-[#10b981]/15 border-[#10b981] text-white"
+                          : "bg-[#181c1f] border-[#2e353c] text-gray-400 hover:border-gray-500"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="scheduleMode"
+                        checked={scheduleMode === "now"}
+                        onChange={() => setScheduleMode("now")}
+                        className="w-4 h-4 accent-[#10b981]"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-white">🚀 Hemen Başlat</div>
+                        <div className="text-[10px] text-gray-400">Pencere açıksa anında başlar, sessiz saatteyse sabahı bekler</div>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setScheduleMode("later")}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
+                        scheduleMode === "later"
+                          ? "bg-[#d4af37]/15 border-[#d4af37] text-white"
+                          : "bg-[#181c1f] border-[#2e353c] text-gray-400 hover:border-gray-500"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="scheduleMode"
+                        checked={scheduleMode === "later"}
+                        onChange={() => setScheduleMode("later")}
+                        className="w-4 h-4 accent-[#d4af37]"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-white">📅 İleri Tarihe Zamanla</div>
+                        <div className="text-[10px] text-gray-400">Belirttiğiniz gün ve saatte otomatik fırlatılır</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {scheduleMode === "later" && (
+                    <div className="pt-2 animate-fade-in">
+                      <label className="block text-xs font-semibold text-gray-300 mb-1 font-serif-title">
+                        Planlanan Tarih ve Saat *
+                      </label>
+                      <input
+                        type="datetime-local"
+                        required
+                        value={scheduledAt}
+                        onChange={(e) => setScheduledAt(e.target.value)}
+                        className="w-full bg-[#181c1f] border border-[#d4af37] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -691,12 +780,20 @@ function CampaignsContent() {
                     </span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-[#23292e]">
+                    <span className="text-gray-400">Gönderim Zamanı:</span>
+                    <span className="font-mono text-[#d4af37] font-bold">
+                      {scheduleMode === "later" && scheduledAt
+                        ? `⏰ Planlandı: ${new Date(scheduledAt).toLocaleString("tr-TR")}`
+                        : "🚀 Hemen Başlat (Zaman Penceresi Korumalı)"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-[#23292e]">
                     <span className="text-gray-400">Gecikme Aralığı:</span>
                     <span className="font-mono text-[#10b981]">{minDelay} - {maxDelay} sn / mesaj</span>
                   </div>
                   <div className="p-3 rounded-xl bg-[#10b981]/10 border border-[#10b981]/25 text-[11px] text-[#10b981] flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 shrink-0 text-[#10b981]" />
-                    <span><strong>Korumalı Hedefleme:</strong> Mesajlar SADECE seçilen gruptaki üyelere gönderilir, genel rehberdeki diğer kişilere kesinlikle mesaj iletilmez.</span>
+                    <span><strong>Korumalı Hedefleme:</strong> Mesajlar SADECE seçilen gruptaki üyelere ve {deliveryWindowStart} - {deliveryWindowEnd} saat aralığında gönderilir.</span>
                   </div>
                   <div className="pt-2">
                     <span className="text-gray-400 block mb-1">Gönderilecek Mesaj:</span>
@@ -738,6 +835,10 @@ function CampaignsContent() {
                         alert("Lütfen kampanya başlığı ve mesaj metnini doldurunuz.");
                         return;
                       }
+                      if (wizardStep === 3 && scheduleMode === "later" && !scheduledAt) {
+                        alert("Lütfen planlanan gönderim tarih ve saatini seçiniz.");
+                        return;
+                      }
                       setWizardStep(wizardStep + 1);
                     }}
                     className="flex items-center gap-1 px-5 py-2 rounded-xl bg-[#d4af37] hover:bg-[#e5c158] text-black text-xs font-black shadow-lg cursor-pointer"
@@ -772,6 +873,8 @@ function CampaignsContent() {
         initialRecipients={previewRecipients}
         minDelay={minDelay}
         maxDelay={maxDelay}
+        scheduledAt={scheduleMode === "later" && scheduledAt ? scheduledAt : null}
+        deliveryWindow={{ start: deliveryWindowStart, end: deliveryWindowEnd }}
         onConfirm={handleFinalDispatch}
         isLaunching={launching}
       />
