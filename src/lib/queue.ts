@@ -1,7 +1,7 @@
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = process.env.REDIS_URL || (process.env.NODE_ENV === 'production' ? 'redis://whatspulse_redis:6379' : 'redis://localhost:6379');
 
 export const redisConnection = new Redis(REDIS_URL, {
   maxRetriesPerRequest: null,
