@@ -55,7 +55,7 @@ export default function LoginPage() {
                 WhatsPulse
               </h1>
               <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30">
-                v2.6.001
+                v2.5.0
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-1">

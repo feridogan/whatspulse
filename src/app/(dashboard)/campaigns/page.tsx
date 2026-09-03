@@ -25,7 +25,9 @@ import {
   ArrowRight,
   X,
   Zap,
-  FolderTree
+  FolderTree,
+  MessageSquare,
+  Calendar
 } from "lucide-react";
 import { replacePlaceholders } from "@/lib/utils";
 import { SendConfirmationModal, RecipientItem } from "@/components/modals/SendConfirmationModal";

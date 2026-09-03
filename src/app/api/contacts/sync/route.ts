@@ -4,6 +4,7 @@ import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { EvolutionService } from "@/lib/evolution";
 import { syncWhatsAppContactInfo } from "@/lib/contact-sync";
 import { requireAuth } from "@/lib/auth";
+import { normalizePhoneNumber } from "@/lib/phone-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -15,31 +16,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
     }
 
-    // 0. Bulletproof clean up of any existing invalid fake LIDs
-    const existingContacts = await prisma.contact.findMany({ select: { id: true, phone: true } });
-    const invalidContactIds = existingContacts
-      .filter(c => {
-        const digits = c.phone.replace(/\D/g, '');
-        return digits.length > 13 || digits.length < 10;
-      })
-      .map(c => c.id);
+    let isReset = false;
+    try {
+      const body = await req.json().catch(() => ({}));
+      if (body?.reset === true || body?.clean === true) {
+        isReset = true;
+      }
+    } catch (e) {}
 
-    if (invalidContactIds.length > 0) {
-      await prisma.contactGroup.deleteMany({ where: { contactId: { in: invalidContactIds } } }).catch(() => {});
-      await prisma.contact.deleteMany({ where: { id: { in: invalidContactIds } } }).catch(() => {});
-    }
+    // 0. If reset requested or cleaning up invalid numbers
+    if (isReset) {
+      await prisma.contactGroup.deleteMany({}).catch(() => {});
+      await prisma.contact.deleteMany({}).catch(() => {});
+      await prisma.subscriberGroup.deleteMany({}).catch(() => {});
+      await prisma.subscriber.deleteMany({}).catch(() => {});
+    } else {
+      const existingContacts = await prisma.contact.findMany({ select: { id: true, phone: true } });
+      const invalidContactIds = existingContacts
+        .filter(c => !normalizePhoneNumber(c.phone))
+        .map(c => c.id);
 
-    const existingSubs = await prisma.subscriber.findMany({ select: { id: true, phone: true } });
-    const invalidSubIds = existingSubs
-      .filter(s => {
-        const digits = s.phone.replace(/\D/g, '');
-        return digits.length > 13 || digits.length < 10;
-      })
-      .map(s => s.id);
+      if (invalidContactIds.length > 0) {
+        await prisma.contactGroup.deleteMany({ where: { contactId: { in: invalidContactIds } } }).catch(() => {});
+        await prisma.contact.deleteMany({ where: { id: { in: invalidContactIds } } }).catch(() => {});
+      }
 
-    if (invalidSubIds.length > 0) {
-      await prisma.subscriberGroup.deleteMany({ where: { subscriberId: { in: invalidSubIds } } }).catch(() => {});
-      await prisma.subscriber.deleteMany({ where: { id: { in: invalidSubIds } } }).catch(() => {});
+      const existingSubs = await prisma.subscriber.findMany({ select: { id: true, phone: true } });
+      const invalidSubIds = existingSubs
+        .filter(s => !normalizePhoneNumber(s.phone))
+        .map(s => s.id);
+
+      if (invalidSubIds.length > 0) {
+        await prisma.subscriberGroup.deleteMany({ where: { subscriberId: { in: invalidSubIds } } }).catch(() => {});
+        await prisma.subscriber.deleteMany({ where: { id: { in: invalidSubIds } } }).catch(() => {});
+      }
     }
 
     // 1. Fetch all contacts from Evolution API
@@ -49,26 +59,13 @@ export async function POST(req: NextRequest) {
     let updatedCount = 0;
 
     for (const c of waContacts) {
-      let rawDigits = c.phone.replace(/\D/g, '');
-      if (rawDigits.length < 10 || rawDigits.length > 13) continue;
-
-      // Normalize Turkish numbers
-      if (rawDigits.length === 10 && rawDigits.startsWith('5')) {
-        rawDigits = '90' + rawDigits;
-      } else if (rawDigits.length === 11 && rawDigits.startsWith('05')) {
-        rawDigits = '90' + rawDigits.substring(1);
-      }
-
-      const formattedPhone = `+${rawDigits}`;
+      const formattedPhone = normalizePhoneNumber(c.phone);
+      if (!formattedPhone) continue;
 
       // Check if contact already exists
       const existing = await prisma.contact.findFirst({
         where: {
-          OR: [
-            { phone: formattedPhone },
-            { phone: rawDigits },
-            { phone: rawDigits.startsWith('90') ? rawDigits.substring(2) : rawDigits },
-          ]
+          phone: formattedPhone,
         }
       });
 
@@ -90,7 +87,7 @@ export async function POST(req: NextRequest) {
           waName: c.name || c.pushName || null,
           profilePicUrl: c.profilePicUrl || null,
         });
-        if (updated.length > 0) {
+        if (updated && Object.keys(updated).length > 0) {
           updatedCount++;
         }
       }

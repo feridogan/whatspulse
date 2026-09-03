@@ -25,99 +25,66 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
 
   const versions = [
     {
-      version: 'v2.6.001',
+      version: 'v2.5.0',
       date: '03 Eylül 2026',
-      badge: 'GÜNCEL SÜRÜM',
+      badge: 'SON SÜRÜM',
       badgeColor: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30',
       highlights: [
         {
-          title: 'Sessiz Saatler & Zaman Penceresi Motoru',
-          desc: '08:00 - 18:00 izinli gönderim aralığı ve gece saatlerinde kuyruğu güvenle duraklatıp sabah devam ettiren koruma motoru.',
-          icon: Clock,
-        },
-        {
-          title: 'Toplu Mesaj İleri Saat Zamanlayıcısı',
-          desc: 'Kampanyaları "Hemen Başlat" veya "İleri Tarihe/Saate Planla" seçenekleriyle geleceğe zamanlama sistemi.',
-          icon: Calendar,
-        },
-        {
-          title: 'WhatsApp Profil & İsim Senkronizasyonu',
-          desc: 'Rehberdeki kişilerin WhatsApp pushName ve profil resimlerini Evolution API üzerinden tekli ve toplu senkronize etme.',
-          icon: Users,
-        },
-        {
-          title: 'Yönetici & Navigasyon Yenilemesi',
-          desc: 'Yönetici profili "Feridun Doğan" olarak güncellendi, sol menü doğrudan modern CRM tablosuna bağlandı.',
-          icon: ShieldCheck,
-        },
-      ],
-    },
-    {
-      version: 'v2.5.001',
-      date: '01 Eylül 2026',
-      badge: 'STABİL SÜRÜM',
-      badgeColor: 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/30',
-      highlights: [
-        {
-          title: 'Grup Kişi Sayacı Optimizasyonu',
-          desc: 'Çift pencereli atama sonrasında gruptaki aktif üye sayısı anlık ve tam doğrulukla senkronize edildi.',
-          icon: Users,
-        },
-        {
-          title: 'Dini & Resmi Bayram Şablon Kütüphanesi',
-          desc: 'Cuma Tebriği, Ramazan/Kurban Bayramı, Kandil, 29 Ekim, 30 Ağustos, 23 Nisan ve Yeni Yıl hazır şablonları eklendi.',
-          icon: FileText,
-        },
-        {
-          title: 'Menü Dili ve Sadeleştirme',
-          desc: 'Navigasyon menüsü "👥 Kişiler" olarak sadeleştirildi, 8 temel modül hiyerarşisi kesinleştirildi.',
-          icon: Activity,
-        },
-        {
-          title: 'Canlı Sohbet Dinamik Akışı',
-          desc: 'Sol sohbet listesi başlangıçta temiz açılarak sadece aktif mesaj trafiği olan veya aranan kişileri listeleyecek şekilde yapılandırıldı.',
+          title: 'Toplu Mesaj Görsel Arayüz Onarımı',
+          desc: 'Toplu mesaj gönderim ekranındaki görsel çökme hatası (MessageSquare) giderildi.',
           icon: MessageSquare,
         },
+        {
+          title: 'Mükerrer & Çöp Numara Temizlik Motoru',
+          desc: 'Mükerrer (çift kayıtlı) kişiler ve geçersiz yabancı spam numaraları temizlendi.',
+          icon: ShieldCheck,
+        },
+        {
+          title: 'Gönderim Öncesi Onay & Alıcı Önizleme',
+          desc: 'Toplu mesaj öncesi onay ve alıcı listesi önizleme mekanizması entegre edildi.',
+          icon: Users,
+        },
+        {
+          title: 'Rehberde Özel İsim Koruması (isCustomName)',
+          desc: 'Rehber senkronizasyonunda el ile tanımlanan isimlerin ezilmesini önleyen özel isim koruması devreye alındı.',
+          icon: CheckCircle2,
+        },
       ],
     },
     {
-      version: 'v2.4.080',
+      version: 'v2.4.0',
       date: '28 Ağustos 2026',
       badge: 'STABİL SÜRÜM',
       badgeColor: 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/30',
       highlights: [
         {
-          title: 'Çift Pencereli Grup Yönetimi',
-          desc: '10.000+ aboneye kadar anlık arama, çift pencereli aktarım ve "Tümünü Ekle" toplu üye tanımlama sistemi kuruldu.',
+          title: 'Çift Pencereli Grup Segmentasyonu',
+          desc: 'Çift pencereli grup segmentasyonu ve hızlı kişi atama altyapısı tamamlandı.',
           icon: Users,
         },
         {
-          title: 'WhatsApp Evolution API Entegrasyonu',
-          desc: 'Instance ff ile canlı bağlantı izleme, QR kod oturum kontrolü ve otomatik yeniden bağlanma sağlandı.',
-          icon: Send,
+          title: 'Dini & Resmi Günler Şablon Kütüphanesi',
+          desc: 'Dini ve resmi günler için hazır şablon kütüphanesi eklendi.',
+          icon: FileText,
         },
         {
-          title: 'Anti-Spam & İnsansı Gecikme Algoritması',
-          desc: 'Toplu gönderimlerde hesap güvenliği için rastgele 5-15 sn insansı gecikme ve paket molaları devreye alındı.',
-          icon: ShieldCheck,
+          title: 'Sessiz Saatler & Zaman Planlayıcı',
+          desc: 'İleri tarihli kampanya zamanlayıcısı ve gece saatleri otomatik gönderim duraklatma sistemi entegre edildi.',
+          icon: Clock,
         },
       ],
     },
     {
-      version: 'v2.4.000',
-      date: '25 Ağustos 2026',
-      badge: 'KURUMSAL GEÇİŞ',
+      version: 'v2.3.0',
+      date: '20 Ağustos 2026',
+      badge: 'KURUMSAL SÜRÜM',
       badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
       highlights: [
         {
-          title: 'Lüks Koyu Altın & Zümrüt Tasarım Dili',
-          desc: 'Kurumsal WhatsPulse kimliği, Serif başlık tipografisi ve responsive yönetim paneli inşa edildi.',
+          title: 'Lüks Tasarım & Çoklu Kullanıcı Mimarisi',
+          desc: 'Koyu altın & zümrüt tema, rol bazlı yetkilendirme (Admin/User) ve anlık WhatsApp oturum izleme.',
           icon: Sparkles,
-        },
-        {
-          title: 'Çoklu Kullanıcı & Giriş Yetkileri',
-          desc: 'Yönetici (Admin) ve Operatör (User) rolleri, şifre sıfırlama ve oturum yönetimi tamamlandı.',
-          icon: ShieldCheck,
         },
       ],
     },
@@ -134,10 +101,10 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
             </div>
             <div>
               <h3 className="text-base font-bold text-white font-serif-title">
-                Sürüm Notları & Değişiklik Günlüğü
+                WhatsPulse Güncelleme Geçmişi
               </h3>
               <p className="text-[11px] text-gray-400">
-                WhatsPulse PRO sistem güncelleme geçmişi ve yenilikler.
+                WhatsPulse PRO sistem güncelleme geçmişi ve sürüm notları.
               </p>
             </div>
           </div>

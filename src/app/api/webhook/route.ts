@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { syncWhatsAppContactInfo } from "@/lib/contact-sync";
-import { normalizePhone, formatPhoneNumber } from "@/lib/utils";
+import { normalizePhoneNumber } from "@/lib/phone-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +25,11 @@ export async function POST(req: NextRequest) {
       const remoteJid = msgData?.key?.remoteJid || msgData?.remoteJid;
       const fromMe = Boolean(msgData?.key?.fromMe);
 
-      if (remoteJid && !remoteJid.includes("@g.us")) {
-        const rawDigits = remoteJid.split("@")[0].replace(/:.*$/, "").replace(/\D/g, "");
-        const cleanPhone = normalizePhone(rawDigits);
-        const formattedPhone = formatPhoneNumber(rawDigits);
+      const normPhone = normalizePhoneNumber(remoteJid);
+
+      if (normPhone) {
+        const cleanPhone = normPhone;
+        const formattedPhone = normPhone;
 
         const waName = msgData?.pushName || msgData?.verifiedBizName || null;
         const profilePicUrl = msgData?.profilePictureUrl || msgData?.profilePicUrl || null;
@@ -45,11 +46,7 @@ export async function POST(req: NextRequest) {
         // Find or create contact
         let contact = await prisma.contact.findFirst({
           where: {
-            OR: [
-              { phone: cleanPhone },
-              { phone: formattedPhone },
-              { phone: rawDigits },
-            ],
+            phone: cleanPhone,
           },
         });
 

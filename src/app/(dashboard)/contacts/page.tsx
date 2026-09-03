@@ -31,7 +31,8 @@ import {
   UserMinus,
   RotateCcw,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -393,6 +394,32 @@ export default function ContactsPage() {
     }
   };
 
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+
+  // Clean up duplicates and invalid bot/spam numbers
+  const handleCleanupDuplicates = async () => {
+    if (!confirm('Rehberdeki mükerrer kayıtlar ve geçersiz yabancı spam numaraları temizlenecek. Onaylıyor musunuz?')) return;
+    try {
+      setIsCleaningDuplicates(true);
+      showToast('Mükerrer ve çöp numaralar taranıyor...', 'success');
+      const res = await fetch('/api/contacts/cleanup-duplicates', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || 'Mükerrer ve çöp numaralar başarıyla temizlendi.');
+        await loadContacts();
+        await loadGroups();
+      } else {
+        showToast(data.error || 'Temizleme işlemi sırasında hata oluştu.', 'error');
+      }
+    } catch (err: any) {
+      showToast('Temizleme hatası: ' + err.message, 'error');
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
+
   // Delete Single Contact
   const handleDeleteContact = async (id: string) => {
     if (!confirm('Bu kişiyi rehberden silmek istediğinize emin misiniz?')) return;
@@ -731,6 +758,18 @@ export default function ContactsPage() {
           >
             <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
             <span>{isSyncingAll ? 'Kişiler Çekiliyor...' : "WhatsApp'tan Kişileri Çek"}</span>
+          </button>
+
+          {/* 🧹 Mükerrerleri ve Çöp Numaraları Temizle */}
+          <button
+            type="button"
+            onClick={handleCleanupDuplicates}
+            disabled={isCleaningDuplicates}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-amber-500/15 hover:from-amber-500/25 hover:to-rose-500/25 text-amber-300 hover:text-amber-200 text-xs font-bold border border-amber-500/35 transition-all shadow-md cursor-pointer disabled:opacity-50"
+            title="Mükerrer kayıtları birleştirir ve geçersiz yabancı spam numaralarını siler"
+          >
+            <Sparkles className={`w-4 h-4 text-amber-400 ${isCleaningDuplicates ? 'animate-spin' : ''}`} />
+            <span>{isCleaningDuplicates ? 'Temizleniyor...' : '🧹 Mükerrerleri ve Çöp Numaraları Temizle'}</span>
           </button>
 
           <button

@@ -100,11 +100,11 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
               <button
                 type="button"
                 onClick={() => setShowChangelog(true)}
-                title="Sürüm Notları & Değişiklik Günlüğü"
+                title="WhatsPulse Güncelleme Geçmişi"
                 className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/35 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
               >
                 <Sparkles className="w-2.5 h-2.5 text-[#d4af37]" />
-                <span>v2.6.001</span>
+                <span>v2.5.0</span>
               </button>
             </div>
 

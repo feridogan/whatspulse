@@ -48,11 +48,11 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => setShowChangelog(true)}
-              title="Sürüm Değişiklik Günlüğü"
+              title="WhatsPulse Güncelleme Geçmişi"
               className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#161a1d] hover:bg-[#202529] text-[#10b981] border border-[#10b981]/30 cursor-pointer flex items-center gap-1 transition-colors"
             >
               <Sparkles className="w-2.5 h-2.5 text-[#d4af37]" />
-              <span>v2.6.001</span>
+              <span>v2.5.0</span>
             </button>
           </div>
 

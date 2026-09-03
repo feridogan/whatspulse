@@ -1,5 +1,6 @@
 import axios from 'axios';
 import prisma from './prisma';
+import { normalizePhoneNumber } from './phone-utils';
 
 interface EvolutionConfig {
   apiUrl: string;
@@ -297,18 +298,15 @@ export class EvolutionService {
           for (const item of res.data) {
             const rawId = String(item.id || item.remoteJid || item.jid || item.number || '');
             if (!rawId) continue;
-            // Ignore LIDs, Groups, Broadcasts, Channels
-            if (rawId.includes('@lid') || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter') || rawId.includes('@hosted')) continue;
 
-            const cleanPhone = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-            // Valid phone numbers must be between 10 and 13 digits
-            if (cleanPhone.length < 10 || cleanPhone.length > 13) continue;
+            const normalizedPhone = normalizePhoneNumber(rawId);
+            if (!normalizedPhone) continue;
 
             const name = item.pushName || item.name || item.verifiedName || item.notify || null;
             const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;
 
-            contactsMap.set(cleanPhone, {
-              phone: cleanPhone,
+            contactsMap.set(normalizedPhone, {
+              phone: normalizedPhone,
               name: name,
               pushName: item.pushName || null,
               profilePicUrl: pic,
@@ -330,23 +328,20 @@ export class EvolutionService {
           for (const item of res.data) {
             const rawId = String(item.id || item.remoteJid || item.jid || '');
             if (!rawId) continue;
-            // Ignore LIDs, Groups, Broadcasts, Channels
-            if (rawId.includes('@lid') || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter') || rawId.includes('@hosted')) continue;
 
-            const cleanPhone = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-            // Valid phone numbers must be between 10 and 13 digits
-            if (cleanPhone.length < 10 || cleanPhone.length > 13) continue;
+            const normalizedPhone = normalizePhoneNumber(rawId);
+            if (!normalizedPhone) continue;
 
             const name = item.pushName || item.name || item.verifiedName || item.notify || null;
             const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;
 
-            if (contactsMap.has(cleanPhone)) {
-              const existing = contactsMap.get(cleanPhone)!;
+            if (contactsMap.has(normalizedPhone)) {
+              const existing = contactsMap.get(normalizedPhone)!;
               if (!existing.name && name) existing.name = name;
               if (!existing.profilePicUrl && pic) existing.profilePicUrl = pic;
             } else {
-              contactsMap.set(cleanPhone, {
-                phone: cleanPhone,
+              contactsMap.set(normalizedPhone, {
+                phone: normalizedPhone,
                 name: name,
                 pushName: item.pushName || null,
                 profilePicUrl: pic,
