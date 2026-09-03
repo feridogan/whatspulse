@@ -2,8 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 import { ensureDbSchemaSync } from '@/lib/db-sync';
+import { POST as cleanupDuplicatesHandler } from '../cleanup-duplicates/route';
+
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (params.id === 'cleanup-duplicates') {
+    return cleanupDuplicatesHandler(req);
+  }
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
+}
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (params.id === 'cleanup-duplicates') {
+    return cleanupDuplicatesHandler(req);
+  }
   try {
     await ensureDbSchemaSync();
 
