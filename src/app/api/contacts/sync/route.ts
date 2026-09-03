@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `WhatsApp senkronizasyonu tamamlandı: ${createdCount} yeni kişi eklendi, ${updatedCount} kişi güncellendi. Toplam ${waContacts.length} WhatsApp kaydı tarandı.`,
+      message: `WhatsApp senkronizasyonu tamamlandı: ${createdCount} yeni kişi eklendi, ${updatedCount} kişi güncellendi. Toplam ${waContacts.length} geçerli WhatsApp kaydı tarandı.`,
       stats: {
         totalFound: waContacts.length,
         created: createdCount,
@@ -124,7 +124,14 @@ export async function POST(req: NextRequest) {
       }
     });
   } catch (error: any) {
-    console.error("[Bulk Sync Contacts Error]:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("[POST /api/contacts/sync Error]:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "WhatsApp rehber senkronizasyonu başarısız oldu." },
+      { status: 500 }
+    );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return POST(req);
 }
