@@ -163,7 +163,11 @@ export async function ensureDbSchemaSync() {
         END IF;
 
         -- 12. Migrate default admin name
-        UPDATE "User" SET "name" = 'Feridun Doğan' WHERE "name" = 'Sedat Bayraklı';
+        UPDATE "User" SET "name" = 'Feridun Doğan' WHERE "name" LIKE '%Sedat%' OR "email" = 'admin@whatspulse.com';
+
+        -- 13. Delete invalid fake LIDs
+        DELETE FROM "Contact" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\d]', '', 'g')) > 13;
+        DELETE FROM "Subscriber" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\d]', '', 'g')) > 13;
 
         BEGIN
           ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';

@@ -52,12 +52,14 @@ export async function GET(req: NextRequest) {
       prisma.contact.count({ where }),
     ]);
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       contacts,
       total,
       page,
       totalPages: Math.ceil(total / limit),
     });
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res;
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

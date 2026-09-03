@@ -15,6 +15,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
     }
 
+    // 0. Clean up any existing invalid fake LIDs
+    await prisma.$executeRawUnsafe(`
+      DELETE FROM "Contact" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\\d]', '', 'g')) > 13;
+      DELETE FROM "Subscriber" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\\d]', '', 'g')) > 13;
+    `).catch(() => {});
+
     // 1. Fetch all contacts from Evolution API
     const waContacts = await EvolutionService.fetchAllContacts();
 
@@ -22,29 +28,38 @@ export async function POST(req: NextRequest) {
     let updatedCount = 0;
 
     for (const c of waContacts) {
-      const cleanPhone = c.phone.replace(/[^\d+]/g, '');
-      if (!cleanPhone || cleanPhone.length < 7) continue;
+      let rawDigits = c.phone.replace(/\D/g, '');
+      if (rawDigits.length < 10 || rawDigits.length > 13) continue;
+
+      // Normalize Turkish numbers
+      if (rawDigits.length === 10 && rawDigits.startsWith('5')) {
+        rawDigits = '90' + rawDigits;
+      } else if (rawDigits.length === 11 && rawDigits.startsWith('05')) {
+        rawDigits = '90' + rawDigits.substring(1);
+      }
+
+      const formattedPhone = `+${rawDigits}`;
 
       // Check if contact already exists
       const existing = await prisma.contact.findFirst({
         where: {
           OR: [
-            { phone: cleanPhone },
-            { phone: `+${cleanPhone}` },
-            { phone: cleanPhone.startsWith('90') ? cleanPhone.substring(2) : cleanPhone },
+            { phone: formattedPhone },
+            { phone: rawDigits },
+            { phone: rawDigits.startsWith('90') ? rawDigits.substring(2) : rawDigits },
           ]
         }
       });
 
       if (!existing) {
         // Create new contact
-        const displayName = c.name || c.pushName || `+${cleanPhone}`;
+        const displayName = c.name || c.pushName || formattedPhone;
         await prisma.contact.create({
           data: {
             name: displayName,
-            phone: cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
+            phone: formattedPhone,
             avatar: c.profilePicUrl || null,
-            isCustomName: false,
+            isCustomName: Boolean(c.name && c.name !== formattedPhone),
           }
         });
         createdCount++;
@@ -61,13 +76,13 @@ export async function POST(req: NextRequest) {
 
       // Also upsert subscriber for compatibility
       await prisma.subscriber.upsert({
-        where: { phone: cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}` },
+        where: { phone: formattedPhone },
         update: {
           name: c.name || c.pushName || undefined,
         },
         create: {
-          name: c.name || c.pushName || `+${cleanPhone}`,
-          phone: cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
+          name: c.name || c.pushName || formattedPhone,
+          phone: formattedPhone,
           channels: ["WhatsApp"],
           preferredTime: "08:00",
           language: "TR",

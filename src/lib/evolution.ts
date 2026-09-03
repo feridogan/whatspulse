@@ -295,10 +295,14 @@ export class EvolutionService {
 
         if (res && Array.isArray(res.data)) {
           for (const item of res.data) {
-            const rawId = item.id || item.remoteJid || item.jid || item.number || '';
-            if (!rawId || String(rawId).includes('@g.us') || String(rawId).includes('@broadcast')) continue;
-            const cleanPhone = String(rawId).split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-            if (cleanPhone.length < 7) continue;
+            const rawId = String(item.id || item.remoteJid || item.jid || item.number || '');
+            if (!rawId) continue;
+            // Ignore LIDs, Groups, Broadcasts, Channels
+            if (rawId.includes('@lid') || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter') || rawId.includes('@hosted')) continue;
+
+            const cleanPhone = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+            // Valid phone numbers must be between 10 and 13 digits
+            if (cleanPhone.length < 10 || cleanPhone.length > 13) continue;
 
             const name = item.pushName || item.name || item.verifiedName || item.notify || null;
             const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;
@@ -324,10 +328,14 @@ export class EvolutionService {
 
         if (res && Array.isArray(res.data)) {
           for (const item of res.data) {
-            const rawId = item.id || item.remoteJid || item.jid || '';
-            if (!rawId || String(rawId).includes('@g.us') || String(rawId).includes('@broadcast')) continue;
-            const cleanPhone = String(rawId).split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
-            if (cleanPhone.length < 7) continue;
+            const rawId = String(item.id || item.remoteJid || item.jid || '');
+            if (!rawId) continue;
+            // Ignore LIDs, Groups, Broadcasts, Channels
+            if (rawId.includes('@lid') || rawId.includes('@g.us') || rawId.includes('@broadcast') || rawId.includes('@newsletter') || rawId.includes('@hosted')) continue;
+
+            const cleanPhone = rawId.split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+            // Valid phone numbers must be between 10 and 13 digits
+            if (cleanPhone.length < 10 || cleanPhone.length > 13) continue;
 
             const name = item.pushName || item.name || item.verifiedName || item.notify || null;
             const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;

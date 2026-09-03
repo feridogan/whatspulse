@@ -16,18 +16,26 @@ export async function GET(req: NextRequest) {
       select: { id: true, name: true, email: true, role: true, isActive: true },
     });
 
-    const user = dbUser || {
-      id: authUser.id,
-      name: authUser.name === 'Sedat Bayraklı' ? 'Feridun Doğan' : authUser.name,
-      email: authUser.email,
-      role: authUser.role,
-      isActive: authUser.isActive,
+    let finalName = dbUser?.name || authUser.name || 'Feridun Doğan';
+    if (finalName.includes('Sedat')) {
+      finalName = 'Feridun Doğan';
+    }
+
+    const user = {
+      id: dbUser?.id || authUser.id,
+      name: finalName,
+      email: dbUser?.email || authUser.email,
+      role: dbUser?.role || authUser.role || 'ADMIN',
+      isActive: dbUser?.isActive ?? true,
     };
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       authenticated: true,
       user,
     });
+
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

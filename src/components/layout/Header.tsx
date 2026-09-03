@@ -164,14 +164,14 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
             {/* User Profile Card */}
             <div className="flex items-center gap-2 pl-2 border-l border-[#23292e]">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#d4af37]/20 to-[#10b981]/20 border border-[#d4af37]/30 flex items-center justify-center text-xs font-bold text-[#d4af37]">
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'FD'}
+                {(user?.name && !user.name.includes('Sedat')) ? user.name.slice(0, 2).toUpperCase() : 'FD'}
               </div>
               <div className="text-left leading-tight hidden sm:block">
                 <div className="text-xs font-bold text-white truncate max-w-[130px]">
-                  {user?.name || 'Feridun Doğan'}
+                  {(user?.name && !user.name.includes('Sedat')) ? user.name : 'Feridun Doğan'}
                 </div>
                 <div className="text-[10px] text-[#d4af37] font-semibold">
-                  {user?.role === 'ADMIN' ? 'Yönetici / Admin' : 'Kullanıcı'}
+                  {user?.role === 'ADMIN' || !user?.role ? 'Yönetici / Admin' : 'Kullanıcı'}
                 </div>
               </div>
             </div>
