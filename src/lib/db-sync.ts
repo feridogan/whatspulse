@@ -162,6 +162,9 @@ export async function ensureDbSchemaSync() {
           ALTER TABLE "Subscriber" ADD COLUMN "isCustomName" BOOLEAN DEFAULT false;
         END IF;
 
+        -- 12. Migrate default admin name
+        UPDATE "User" SET "name" = 'Feridun Doğan' WHERE "name" = 'Sedat Bayraklı';
+
         BEGIN
           ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';
         EXCEPTION WHEN duplicate_object THEN NULL;

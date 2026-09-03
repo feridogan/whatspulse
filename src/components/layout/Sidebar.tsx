@@ -29,7 +29,7 @@ export function Sidebar() {
   const menuItems = [
     { href: '/', label: 'Panel', icon: LayoutDashboard },
     { href: '/chat', label: 'Canlı Sohbet', icon: MessageSquare, badge: 'Canlı' },
-    { href: '/subscribers', label: 'Kişiler', icon: Users, badge: 'Rehber' },
+    { href: '/contacts', label: 'Kişiler', icon: Users, badge: 'Rehber' },
     { href: '/groups', label: 'Gruplar', icon: FolderTree },
     { href: '/templates', label: 'Mesaj Şablonları', icon: FileText, badge: 'Şablon' },
     { href: '/campaigns', label: 'Toplu Mesaj Gönderimi', icon: Send, badge: 'Toplu' },

@@ -412,7 +412,7 @@ export default function UsersPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Örn: Sedat Bayraklı"
+                  placeholder="Örn: Feridun Doğan"
                   value={createForm.name}
                   onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                   className="w-full bg-[#181c1f] border border-[#2e353c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"

@@ -23,11 +23,17 @@ export async function POST(req: NextRequest) {
       await prisma.user.create({
         data: {
           email: 'admin@whatspulse.com',
-          name: 'Sedat Bayraklı',
+          name: 'Feridun Doğan',
           password: defaultHash,
           role: 'ADMIN',
           isActive: true
         }
+      });
+    } else {
+      // Ensure default admin name is Feridun Doğan
+      await prisma.user.updateMany({
+        where: { name: 'Sedat Bayraklı' },
+        data: { name: 'Feridun Doğan' }
       });
     }
 

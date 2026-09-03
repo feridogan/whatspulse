@@ -18,7 +18,7 @@ export function BottomNav() {
   const navItems = [
     { href: '/', label: 'Panel', icon: LayoutDashboard },
     { href: '/chat', label: 'Sohbet', icon: MessageSquare },
-    { href: '/subscribers', label: 'Aboneler', icon: Users },
+    { href: '/contacts', label: 'Kişiler', icon: Users },
     { href: '/special-days', label: 'Özel Günler', icon: Calendar },
     { href: '/groups', label: 'Gruplar', icon: FolderTree },
     { href: '/settings', label: 'Ayarlar', icon: Settings },
