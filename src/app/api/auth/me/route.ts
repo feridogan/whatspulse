@@ -12,12 +12,12 @@ export async function GET(req: NextRequest) {
     }
 
     const dbUser = await prisma.user.findUnique({
-      where: { id: authUser.userId },
+      where: { id: authUser.id },
       select: { id: true, name: true, email: true, role: true, isActive: true },
     });
 
     const user = dbUser || {
-      id: authUser.userId,
+      id: authUser.id,
       name: authUser.name === 'Sedat Bayraklı' ? 'Feridun Doğan' : authUser.name,
       email: authUser.email,
       role: authUser.role,
