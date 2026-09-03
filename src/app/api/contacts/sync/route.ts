@@ -15,11 +15,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
     }
 
-    // 0. Clean up any existing invalid fake LIDs
-    await prisma.$executeRawUnsafe(`
-      DELETE FROM "Contact" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\\d]', '', 'g')) > 13;
-      DELETE FROM "Subscriber" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\\d]', '', 'g')) > 13;
-    `).catch(() => {});
+    // 0. Bulletproof clean up of any existing invalid fake LIDs
+    const existingContacts = await prisma.contact.findMany({ select: { id: true, phone: true } });
+    const invalidContactIds = existingContacts
+      .filter(c => {
+        const digits = c.phone.replace(/\D/g, '');
+        return digits.length > 13 || digits.length < 10;
+      })
+      .map(c => c.id);
+
+    if (invalidContactIds.length > 0) {
+      await prisma.contactGroup.deleteMany({ where: { contactId: { in: invalidContactIds } } }).catch(() => {});
+      await prisma.contact.deleteMany({ where: { id: { in: invalidContactIds } } }).catch(() => {});
+    }
+
+    const existingSubs = await prisma.subscriber.findMany({ select: { id: true, phone: true } });
+    const invalidSubIds = existingSubs
+      .filter(s => {
+        const digits = s.phone.replace(/\D/g, '');
+        return digits.length > 13 || digits.length < 10;
+      })
+      .map(s => s.id);
+
+    if (invalidSubIds.length > 0) {
+      await prisma.subscriberGroup.deleteMany({ where: { subscriberId: { in: invalidSubIds } } }).catch(() => {});
+      await prisma.subscriber.deleteMany({ where: { id: { in: invalidSubIds } } }).catch(() => {});
+    }
 
     // 1. Fetch all contacts from Evolution API
     const waContacts = await EvolutionService.fetchAllContacts();

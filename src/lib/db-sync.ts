@@ -166,8 +166,8 @@ export async function ensureDbSchemaSync() {
         UPDATE "User" SET "name" = 'Feridun Doğan' WHERE "name" LIKE '%Sedat%' OR "email" = 'admin@whatspulse.com';
 
         -- 13. Delete invalid fake LIDs
-        DELETE FROM "Contact" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\d]', '', 'g')) > 13;
-        DELETE FROM "Subscriber" WHERE LENGTH(REGEXP_REPLACE("phone", '[^\d]', '', 'g')) > 13;
+        DELETE FROM "Contact" WHERE LENGTH(REGEXP_REPLACE("phone", '[^0-9]', '', 'g')) > 13 OR LENGTH(REGEXP_REPLACE("phone", '[^0-9]', '', 'g')) < 10;
+        DELETE FROM "Subscriber" WHERE LENGTH(REGEXP_REPLACE("phone", '[^0-9]', '', 'g')) > 13 OR LENGTH(REGEXP_REPLACE("phone", '[^0-9]', '', 'g')) < 10;
 
         BEGIN
           ALTER TYPE "CampaignStatus" ADD VALUE IF NOT EXISTS 'SCHEDULED';
