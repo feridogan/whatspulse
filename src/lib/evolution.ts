@@ -278,6 +278,85 @@ export class EvolutionService {
     }
   }
 
+  /**
+   * Fetch All WhatsApp Contacts & Chats from Evolution API instance
+   */
+  static async fetchAllContacts(customName?: string): Promise<Array<{ phone: string; name?: string | null; pushName?: string | null; profilePicUrl?: string | null }>> {
+    try {
+      const { client, instance } = await getClient(customName);
+      const contactsMap = new Map<string, { phone: string; name?: string | null; pushName?: string | null; profilePicUrl?: string | null }>();
+
+      // 1. Try findContacts
+      try {
+        let res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, {}).catch(() => null);
+        if (!res || !Array.isArray(res.data)) {
+          res = await client.get(`/chat/findContacts/${encodeURIComponent(instance)}`).catch(() => null);
+        }
+
+        if (res && Array.isArray(res.data)) {
+          for (const item of res.data) {
+            const rawId = item.id || item.remoteJid || item.jid || item.number || '';
+            if (!rawId || String(rawId).includes('@g.us') || String(rawId).includes('@broadcast')) continue;
+            const cleanPhone = String(rawId).split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+            if (cleanPhone.length < 7) continue;
+
+            const name = item.pushName || item.name || item.verifiedName || item.notify || null;
+            const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;
+
+            contactsMap.set(cleanPhone, {
+              phone: cleanPhone,
+              name: name,
+              pushName: item.pushName || null,
+              profilePicUrl: pic,
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn('[Evolution fetchAllContacts contacts error]:', err.message);
+      }
+
+      // 2. Also try findChats to capture recent conversations and names
+      try {
+        let res = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, {}).catch(() => null);
+        if (!res || !Array.isArray(res.data)) {
+          res = await client.get(`/chat/findChats/${encodeURIComponent(instance)}`).catch(() => null);
+        }
+
+        if (res && Array.isArray(res.data)) {
+          for (const item of res.data) {
+            const rawId = item.id || item.remoteJid || item.jid || '';
+            if (!rawId || String(rawId).includes('@g.us') || String(rawId).includes('@broadcast')) continue;
+            const cleanPhone = String(rawId).split('@')[0].replace(/:.*$/, '').replace(/\D/g, '');
+            if (cleanPhone.length < 7) continue;
+
+            const name = item.pushName || item.name || item.verifiedName || item.notify || null;
+            const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || null;
+
+            if (contactsMap.has(cleanPhone)) {
+              const existing = contactsMap.get(cleanPhone)!;
+              if (!existing.name && name) existing.name = name;
+              if (!existing.profilePicUrl && pic) existing.profilePicUrl = pic;
+            } else {
+              contactsMap.set(cleanPhone, {
+                phone: cleanPhone,
+                name: name,
+                pushName: item.pushName || null,
+                profilePicUrl: pic,
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[Evolution fetchAllContacts chats error]:', err.message);
+      }
+
+      return Array.from(contactsMap.values());
+    } catch (error: any) {
+      console.error('[Evolution fetchAllContacts Fatal]:', error.message);
+      return [];
+    }
+  }
+
   static async logout(customName?: string) {
     return this.logoutInstance(customName);
   }

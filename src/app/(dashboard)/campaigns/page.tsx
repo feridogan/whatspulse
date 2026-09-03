@@ -440,10 +440,10 @@ function CampaignsContent() {
                 </h3>
                 <p className="text-[11px] text-gray-400">
                   Adım {wizardStep} / 4 : {
-                    wizardStep === 1 ? "Hedef Kitle Seçimi" :
-                    wizardStep === 2 ? "Mesaj & Şablon" :
-                    wizardStep === 3 ? "Anti-Spam & Gecikme Ayarları" :
-                    "Onay ve Gönderim"
+                    wizardStep === 1 ? "1. Hedef Kitle Seçimi" :
+                    wizardStep === 2 ? "2. Mesaj & Şablon" :
+                    wizardStep === 3 ? "3. Zamanlama Planı (Hemen / İleri Tarih) & Koruma" :
+                    "4. Onay ve Fırlatma"
                   }
                 </p>
               </div>
@@ -452,16 +452,29 @@ function CampaignsContent() {
               </button>
             </div>
 
-            {/* Stepper Indicator */}
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((step) => (
-                <div
+            {/* Interactive Step Buttons */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { step: 1, label: "1. Hedef Kitle", icon: Users },
+                { step: 2, label: "2. Mesaj Metni", icon: MessageSquare },
+                { step: 3, label: "3. Zamanlama Planı", icon: Clock },
+                { step: 4, label: "4. Onay & Gönder", icon: Send },
+              ].map(({ step, label, icon: StepIcon }) => (
+                <button
                   key={step}
-                  onClick={() => step < wizardStep && setWizardStep(step)}
-                  className={`h-1.5 rounded-full transition-all ${
-                    step <= wizardStep ? "bg-[#10b981]" : "bg-[#23292e]"
+                  type="button"
+                  onClick={() => setWizardStep(step)}
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    wizardStep === step
+                      ? "bg-[#10b981] text-black border-[#10b981] shadow-md shadow-[#10b981]/20"
+                      : step < wizardStep
+                      ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30 hover:bg-[#10b981]/25"
+                      : "bg-[#161a1d] text-gray-400 border-[#23292e] hover:border-gray-600"
                   }`}
-                />
+                >
+                  <StepIcon className="w-3.5 h-3.5" />
+                  <span className="truncate">{label}</span>
+                </button>
               ))}
             </div>
 

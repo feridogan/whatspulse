@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { requireAuth } from "@/lib/auth";
+import { EvolutionService } from "@/lib/evolution";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
     }
 
-    // Copy all Contacts to Subscribers
+    // 1. Fetch all contacts from Evolution API first
+    const waContacts = await EvolutionService.fetchAllContacts().catch(() => []);
+    for (const c of waContacts) {
+      const cleanPhone = c.phone.replace(/[^\d+]/g, '');
+      if (!cleanPhone || cleanPhone.length < 7) continue;
+      const formattedPhone = cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`;
+
+      // Check if contact exists
+      const existing = await prisma.contact.findFirst({
+        where: {
+          OR: [
+            { phone: formattedPhone },
+            { phone: cleanPhone },
+          ]
+        }
+      });
+
+      if (!existing) {
+        await prisma.contact.create({
+          data: {
+            name: c.name || c.pushName || formattedPhone,
+            phone: formattedPhone,
+            avatar: c.profilePicUrl || null,
+            isCustomName: false,
+          }
+        }).catch(() => {});
+      }
+    }
+
+    // 2. Copy all Contacts to Subscribers
     const contacts = await prisma.contact.findMany({
       include: { groups: true }
     });
@@ -52,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${syncedCount} kişi abone rehberine başarıyla eşitlendi.`,
+      message: `${syncedCount} kişi WhatsApp rehberinden başarıyla senkronize edildi.`,
       syncedCount
     });
   } catch (error: any) {

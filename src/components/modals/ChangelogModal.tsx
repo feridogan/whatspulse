@@ -25,10 +25,38 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
 
   const versions = [
     {
-      version: 'v2.5.001',
-      date: '01 Eylül 2026',
+      version: 'v2.6.001',
+      date: '03 Eylül 2026',
       badge: 'GÜNCEL SÜRÜM',
       badgeColor: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30',
+      highlights: [
+        {
+          title: 'Sessiz Saatler & Zaman Penceresi Motoru',
+          desc: '08:00 - 18:00 izinli gönderim aralığı ve gece saatlerinde kuyruğu güvenle duraklatıp sabah devam ettiren koruma motoru.',
+          icon: Clock,
+        },
+        {
+          title: 'Toplu Mesaj İleri Saat Zamanlayıcısı',
+          desc: 'Kampanyaları "Hemen Başlat" veya "İleri Tarihe/Saate Planla" seçenekleriyle geleceğe zamanlama sistemi.',
+          icon: Calendar,
+        },
+        {
+          title: 'WhatsApp Profil & İsim Senkronizasyonu',
+          desc: 'Rehberdeki kişilerin WhatsApp pushName ve profil resimlerini Evolution API üzerinden tekli ve toplu senkronize etme.',
+          icon: Users,
+        },
+        {
+          title: 'Yönetici & Navigasyon Yenilemesi',
+          desc: 'Yönetici profili "Feridun Doğan" olarak güncellendi, sol menü doğrudan modern CRM tablosuna bağlandı.',
+          icon: ShieldCheck,
+        },
+      ],
+    },
+    {
+      version: 'v2.5.001',
+      date: '01 Eylül 2026',
+      badge: 'STABİL SÜRÜM',
+      badgeColor: 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/30',
       highlights: [
         {
           title: 'Grup Kişi Sayacı Optimizasyonu',
