@@ -111,20 +111,16 @@ export async function POST(req: NextRequest) {
       const contactsList = Array.isArray(data) ? data : [data];
       for (const item of contactsList) {
         const remoteJid = item?.id || item?.remoteJid || item?.jid;
-        if (remoteJid && !remoteJid.includes("@g.us")) {
-          const rawDigits = remoteJid.split("@")[0].replace(/:.*$/, "").replace(/\D/g, "");
-          const cleanPhone = normalizePhone(rawDigits);
-          const formattedPhone = formatPhoneNumber(rawDigits);
+        const normPhone = normalizePhoneNumber(remoteJid);
+        if (normPhone) {
+          const cleanPhone = normPhone;
+          const formattedPhone = normPhone;
           const waName = item?.pushName || item?.name || item?.verifiedName || null;
           const profilePicUrl = item?.profilePictureUrl || item?.profilePicUrl || null;
 
           const contact = await prisma.contact.findFirst({
             where: {
-              OR: [
-                { phone: cleanPhone },
-                { phone: formattedPhone },
-                { phone: rawDigits },
-              ],
+              phone: cleanPhone,
             },
           });
 
