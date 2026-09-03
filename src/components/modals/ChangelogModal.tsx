@@ -25,9 +25,9 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
 
   const versions = [
     {
-      version: 'v2.5.0',
+      version: 'v2.6.001',
       date: '03 Eylül 2026',
-      badge: 'SON SÜRÜM',
+      badge: 'GÜNCEL SÜRÜM',
       badgeColor: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30',
       highlights: [
         {
