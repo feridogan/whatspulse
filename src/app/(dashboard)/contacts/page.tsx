@@ -402,16 +402,28 @@ export default function ContactsPage() {
     try {
       setIsCleaningDuplicates(true);
       showToast('Mükerrer ve çöp numaralar taranıyor...', 'success');
-      const res = await fetch('/api/contacts/cleanup-duplicates', {
+      let res = await fetch('/api/contacts/cleanup-duplicates', {
         method: 'POST',
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).catch(() => null);
+
+      let data = res && res.ok ? await res.json().catch(() => null) : null;
+      if (!data || !data.success) {
+        res = await fetch('/api/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cleanup-duplicates' }),
+        });
+        data = await res.json();
+      }
+
+      if (data && data.success) {
         showToast(data.message || 'Mükerrer ve çöp numaralar başarıyla temizlendi.');
         await loadContacts();
         await loadGroups();
       } else {
-        showToast(data.error || 'Temizleme işlemi sırasında hata oluştu.', 'error');
+        showToast(data?.error || 'Temizleme işlemi sırasında hata oluştu.', 'error');
       }
     } catch (err: any) {
       showToast('Temizleme hatası: ' + err.message, 'error');

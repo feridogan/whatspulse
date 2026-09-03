@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 import { ensureDbSchemaSync } from '@/lib/db-sync';
+import { POST as cleanupDuplicatesHandler } from './cleanup-duplicates/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await ensureDbSchemaSync();
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+
+    if (body?.action === 'cleanup-duplicates' || body?.action === 'cleanup') {
+      return cleanupDuplicatesHandler(req);
+    }
+
     const { name, phone, email, notes, groupIds } = body;
 
     if (!name || !phone) {
