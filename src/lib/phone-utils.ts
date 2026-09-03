@@ -46,26 +46,7 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
     return `+90${rawDigits.substring(3)}`;
   }
 
-  // 2. Turkish Landlines & Toll-free numbers (02xx, 03xx, 04xx, 0850):
-  if (rawDigits.length === 10 && (rawDigits.startsWith('2') || rawDigits.startsWith('3') || rawDigits.startsWith('4') || rawDigits.startsWith('850'))) {
-    return `+90${rawDigits}`;
-  }
-  if (rawDigits.length === 11 && (rawDigits.startsWith('02') || rawDigits.startsWith('03') || rawDigits.startsWith('04') || rawDigits.startsWith('0850'))) {
-    return `+90${rawDigits.substring(1)}`;
-  }
-  if (rawDigits.length === 12 && (rawDigits.startsWith('902') || rawDigits.startsWith('903') || rawDigits.startsWith('904') || rawDigits.startsWith('90850'))) {
-    return `+${rawDigits}`;
-  }
-
-  // Corrupted Turkish mobile with 10 digits starting with 5 at the end
-  if (rawDigits.length >= 10) {
-    const last10 = rawDigits.slice(-10);
-    if (last10.startsWith('5')) {
-      return `+90${last10}`;
-    }
-  }
-
-  // Foreign bot / spam numbers (+238, +409, +447, +463, +874, +945 etc.)
+  // Reject all others: foreign bot/spam numbers (+238, +409, +447, etc.) and non-mobile
   return null;
 }
 
