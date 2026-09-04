@@ -52,89 +52,82 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 1. Fetch all contacts from Evolution API
+    // 1. Fetch all contacts & chats from Evolution API
     const waContacts = await EvolutionService.fetchAllContacts();
+
+    // 2. Load existing contacts to protect isCustomName and count created vs updated
+    const existingContacts = isReset 
+      ? [] 
+      : await prisma.contact.findMany({ select: { id: true, phone: true, name: true, isCustomName: true } });
+    
+    const existingMap = new Map(existingContacts.map(c => [c.phone, c]));
 
     let createdCount = 0;
     let updatedCount = 0;
 
-    for (const c of waContacts) {
-      const formattedPhone = normalizePhoneNumber(c.phone);
-      if (!formattedPhone) continue;
+    // 3. Toplu Veritabanı Kaydı (Bulk Upsert & Chunking in batches of 200)
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < waContacts.length; i += CHUNK_SIZE) {
+      const batch = waContacts.slice(i, i + CHUNK_SIZE);
 
-      // Check if contact already exists
-      const existing = await prisma.contact.findFirst({
-        where: {
-          phone: formattedPhone,
-        }
-      });
-
-      if (!existing) {
-        // Create new contact
-        const displayName = c.name || c.pushName || formattedPhone;
-        await prisma.contact.create({
-          data: {
-            name: displayName,
-            phone: formattedPhone,
-            avatar: c.profilePicUrl || null,
-            isCustomName: Boolean(c.name && c.name !== formattedPhone),
-          }
-        });
-        createdCount++;
-      } else {
-        // Update existing contact non-destructively
-        const updated = await syncWhatsAppContactInfo(existing, {
-          waName: c.name || c.pushName || null,
-          profilePicUrl: c.profilePicUrl || null,
-        });
-        if (updated && Object.keys(updated).length > 0) {
+      const contactOps = batch.map((item) => {
+        const cleanPhone = item.cleanPhone || item.phone;
+        const existing = existingMap.get(cleanPhone);
+        
+        if (!existing) {
+          createdCount++;
+          existingMap.set(cleanPhone, { id: 'temp', phone: cleanPhone, name: item.name || cleanPhone, isCustomName: false });
+        } else {
           updatedCount++;
         }
-      }
 
-      // Also upsert subscriber for compatibility
-      await prisma.subscriber.upsert({
-        where: { phone: formattedPhone },
-        update: {
-          name: c.name || c.pushName || undefined,
-        },
-        create: {
-          name: c.name || c.pushName || formattedPhone,
-          phone: formattedPhone,
-          channels: ["WhatsApp"],
-          preferredTime: "08:00",
-          language: "TR",
-        }
-      }).catch(() => {});
-    }
+        const isCustomName = existing?.isCustomName === true;
+        // Mevcut özel isim verilmiş kayıtları koru (isCustomName: true ise isme dokunma)
+        const nameToUpdate = item.name && !isCustomName ? item.name : undefined;
 
-    // Also sync all existing Contacts into Subscriber table
-    const allContacts = await prisma.contact.findMany();
-    for (const ac of allContacts) {
-      await prisma.subscriber.upsert({
-        where: { phone: ac.phone },
-        update: {
-          name: ac.name,
-          email: ac.email || undefined,
-          notes: ac.notes || undefined,
-          isBlacklisted: ac.isBlacklisted,
-        },
-        create: {
-          name: ac.name,
-          phone: ac.phone,
-          email: ac.email || undefined,
-          notes: ac.notes || undefined,
-          isBlacklisted: ac.isBlacklisted,
-          channels: ["WhatsApp"],
-          preferredTime: "08:00",
-          language: "TR",
-        }
-      }).catch(() => {});
+        return prisma.contact.upsert({
+          where: { phone: cleanPhone },
+          update: {
+            avatar: item.profilePictureUrl || item.profilePicUrl || undefined,
+            ...(nameToUpdate ? { name: nameToUpdate } : {}),
+          },
+          create: {
+            phone: cleanPhone,
+            name: item.name || cleanPhone,
+            avatar: item.profilePictureUrl || item.profilePicUrl || null,
+            isCustomName: false,
+          },
+        });
+      });
+
+      await prisma.$transaction(contactOps);
+
+      // Upsert subscriber table in same chunk
+      const subOps = batch.map((item) => {
+        const cleanPhone = item.cleanPhone || item.phone;
+        return prisma.subscriber.upsert({
+          where: { phone: cleanPhone },
+          update: {
+            ...(item.name ? { name: item.name } : {}),
+          },
+          create: {
+            name: item.name || cleanPhone,
+            phone: cleanPhone,
+            channels: ["WhatsApp"],
+            preferredTime: "08:00",
+            language: "TR",
+          },
+        });
+      });
+
+      await prisma.$transaction(subOps).catch((err) => {
+        console.warn(`[Bulk Sync Subscriber warning]: ${err.message}`);
+      });
     }
 
     return NextResponse.json({
       success: true,
-      message: `WhatsApp senkronizasyonu tamamlandı: ${createdCount} yeni kişi eklendi, ${updatedCount} kişi güncellendi. Toplam ${waContacts.length} geçerli WhatsApp kaydı tarandı.`,
+      message: `WhatsApp senkronizasyonu tamamlandı: ${createdCount} yeni kişi eklendi, ${updatedCount} kişi güncellendi. Toplam ${waContacts.length} benzersiz WhatsApp kaydı işlendi.`,
       stats: {
         totalFound: waContacts.length,
         created: createdCount,
