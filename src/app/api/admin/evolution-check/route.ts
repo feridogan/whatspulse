@@ -20,21 +20,77 @@ export async function GET(req: NextRequest) {
       timeout: 20000,
     });
 
-    let createRes = null;
+    // 0. Fetch Instances
+    let instances = null;
     try {
-      const res = await client.post('/instance/create', {
-        instanceName: config.instance,
-        qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
-      });
-      createRes = { success: true, data: res.data };
+      const res = await client.get('/instance/fetchInstances');
+      instances = res.data;
     } catch (e: any) {
-      createRes = { success: false, error: e.message, data: e.response?.data };
+      instances = { error: e.message, data: e.response?.data };
+    }
+
+    // 1. Connection State
+    let connectionState = null;
+    try {
+      const res = await client.get(`/instance/connectionState/${config.instance}`);
+      connectionState = res.data;
+    } catch (e: any) {
+      connectionState = { error: e.message, data: e.response?.data };
+    }
+
+    // 2. findContacts POST with where: {}
+    let contactsPost = null;
+    try {
+      const res = await client.post(`/chat/findContacts/${config.instance}`, { where: {} });
+      const isArr = Array.isArray(res.data);
+      const count = isArr ? res.data.length : (res.data?.length || res.data?.contacts?.length || Object.keys(res.data || {}).length);
+      contactsPost = {
+        status: res.status,
+        isArray: isArr,
+        count,
+        sample: isArr ? res.data.slice(0, 3) : res.data,
+      };
+    } catch (e: any) {
+      contactsPost = { error: e.message, data: e.response?.data };
+    }
+
+    // 3. findContacts GET
+    let contactsGet = null;
+    try {
+      const res = await client.get(`/chat/findContacts/${config.instance}`);
+      const isArr = Array.isArray(res.data);
+      contactsGet = {
+        status: res.status,
+        isArray: isArr,
+        count: isArr ? res.data.length : (res.data?.length || res.data?.contacts?.length || Object.keys(res.data || {}).length),
+        sample: isArr ? res.data.slice(0, 3) : res.data,
+      };
+    } catch (e: any) {
+      contactsGet = { error: e.message, data: e.response?.data };
+    }
+
+    // 4. findChats POST
+    let chatsPost = null;
+    try {
+      const res = await client.post(`/chat/findChats/${config.instance}`, { where: {} });
+      const isArr = Array.isArray(res.data);
+      chatsPost = {
+        status: res.status,
+        isArray: isArr,
+        count: isArr ? res.data.length : (res.data?.length || res.data?.chats?.length || Object.keys(res.data || {}).length),
+        sample: isArr ? res.data.slice(0, 3) : res.data,
+      };
+    } catch (e: any) {
+      chatsPost = { error: e.message, data: e.response?.data };
     }
 
     return NextResponse.json({
       config,
-      createRes,
+      instances,
+      connectionState,
+      contactsPost,
+      contactsGet,
+      chatsPost,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

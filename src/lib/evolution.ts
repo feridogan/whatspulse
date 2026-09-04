@@ -310,48 +310,45 @@ export class EvolutionService {
         return [];
       };
 
-      // 1. Primary Source: POST /chat/findContacts/{instance} with { where: {} }
-      try {
-        console.log(`[Evolution Sync] Querying POST /chat/findContacts/${instance} with { where: {} }...`);
-        let res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, { where: {} }).catch((e) => {
-          console.warn(`[Evolution findContacts POST error]: ${e.message}`);
-          return null;
-        });
+      const processItem = (item: any) => {
+        const rawId = String(item.id || item.remoteJid || item.jid || item.number || item.phone || '');
+        if (!rawId) return;
 
-        if (!res || extractList(res.data).length === 0) {
-          // Fallback GET
-          res = await client.get(`/chat/findContacts/${encodeURIComponent(instance)}`).catch(() => null);
+        // Strictly filter out groups, newsletters, broadcasts, lid, hosted, status
+        if (
+          rawId.includes('@g.us') ||
+          rawId.includes('@newsletter') ||
+          rawId.includes('@broadcast') ||
+          rawId.includes('@lid') ||
+          rawId.includes('@hosted') ||
+          rawId.includes('status')
+        ) {
+          return;
         }
 
-        const rawContacts = extractList(res?.data);
-        console.log(`[Evolution Sync] findContacts returned ${rawContacts.length} items`);
+        const cleanPhone = normalizePhoneNumber(rawId);
+        if (!cleanPhone) return;
 
-        for (const item of rawContacts) {
-          const rawId = String(item.id || item.remoteJid || item.jid || item.number || item.phone || '');
-          if (!rawId) continue;
+        const rawName = item.name || item.pushName || item.verifiedName || item.notify || null;
+        const cleanName = rawName && String(rawName).trim() && !isPlaceholderName(rawName, cleanPhone)
+          ? String(rawName).trim()
+          : null;
 
-          // Strictly filter out groups, newsletters, broadcasts, lid, hosted, status
-          if (
-            rawId.includes('@g.us') ||
-            rawId.includes('@newsletter') ||
-            rawId.includes('@broadcast') ||
-            rawId.includes('@lid') ||
-            rawId.includes('@hosted') ||
-            rawId.includes('status')
-          ) {
-            continue;
+        // Foreign Spam/Bot Filtering: If the number is not Turkish (+90) and doesn't have a valid contact name, skip it
+        if (!cleanPhone.startsWith('+90') && !cleanName) {
+          return;
+        }
+
+        const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || item.url || null;
+
+        if (contactsMap.has(cleanPhone)) {
+          const existing = contactsMap.get(cleanPhone)!;
+          if (!existing.name && cleanName) existing.name = cleanName;
+          if (!existing.profilePictureUrl && pic) {
+            existing.profilePictureUrl = pic;
+            existing.profilePicUrl = pic;
           }
-
-          const cleanPhone = normalizePhoneNumber(rawId);
-          if (!cleanPhone) continue;
-
-          const rawName = item.name || item.pushName || item.verifiedName || item.notify || null;
-          const cleanName = rawName && String(rawName).trim() && !isPlaceholderName(rawName, cleanPhone)
-            ? String(rawName).trim()
-            : null;
-
-          const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || item.url || null;
-
+        } else {
           contactsMap.set(cleanPhone, {
             cleanPhone,
             phone: cleanPhone,
@@ -361,72 +358,97 @@ export class EvolutionService {
             profilePicUrl: pic,
           });
         }
-      } catch (err: any) {
-        console.warn('[Evolution fetchAllContacts contacts error]:', err.message);
+      };
+
+      const PAGE_LIMIT = 500;
+
+      // 1. Primary Source: POST /chat/findContacts/{instance} with pagination
+      let offset = 0;
+      let hasMoreContacts = true;
+      while (hasMoreContacts) {
+        try {
+          console.log(`[Evolution Sync] Querying POST /chat/findContacts/${instance} (limit: ${PAGE_LIMIT}, offset: ${offset})...`);
+          let res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, {
+            where: {},
+            limit: PAGE_LIMIT,
+            offset: offset,
+          }).catch((e) => {
+            console.warn(`[Evolution findContacts POST error at offset ${offset}]: ${e.message}`);
+            return null;
+          });
+
+          if (!res && offset === 0) {
+            // Fallback GET for offset 0
+            res = await client.get(`/chat/findContacts/${encodeURIComponent(instance)}?limit=${PAGE_LIMIT}&offset=${offset}`).catch(() => null);
+          }
+
+          const rawContacts = extractList(res?.data);
+          console.log(`[Evolution Sync] findContacts (offset ${offset}) returned ${rawContacts.length} items`);
+
+          if (rawContacts.length === 0) {
+            hasMoreContacts = false;
+            break;
+          }
+
+          for (const item of rawContacts) {
+            processItem(item);
+          }
+
+          if (rawContacts.length < PAGE_LIMIT) {
+            hasMoreContacts = false;
+          } else {
+            offset += PAGE_LIMIT;
+          }
+
+          if (offset > 20000) break; // Safety cutoff
+        } catch (err: any) {
+          console.warn(`[Evolution findContacts error at offset ${offset}]:`, err.message);
+          hasMoreContacts = false;
+        }
       }
 
-      // 2. Secondary Guarantee Source: POST /chat/findChats/{instance} with { where: {} }
-      try {
-        console.log(`[Evolution Sync] Querying POST /chat/findChats/${instance} with { where: {} }...`);
-        let chatsRes = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, { where: {} }).catch((e) => {
-          console.warn(`[Evolution findChats POST error]: ${e.message}`);
-          return null;
-        });
+      // 2. Secondary Guarantee Source: POST /chat/findChats/{instance} with pagination
+      offset = 0;
+      let hasMoreChats = true;
+      while (hasMoreChats) {
+        try {
+          console.log(`[Evolution Sync] Querying POST /chat/findChats/${instance} (limit: ${PAGE_LIMIT}, offset: ${offset})...`);
+          let chatsRes = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, {
+            where: {},
+            limit: PAGE_LIMIT,
+            offset: offset,
+          }).catch((e) => {
+            console.warn(`[Evolution findChats POST error at offset ${offset}]: ${e.message}`);
+            return null;
+          });
 
-        if (!chatsRes || extractList(chatsRes.data).length === 0) {
-          chatsRes = await client.get(`/chat/findChats/${encodeURIComponent(instance)}`).catch(() => null);
-        }
-
-        const rawChats = extractList(chatsRes?.data);
-        console.log(`[Evolution Sync] findChats returned ${rawChats.length} items`);
-
-        for (const item of rawChats) {
-          const rawId = String(item.id || item.remoteJid || item.jid || item.number || item.phone || '');
-          if (!rawId) continue;
-
-          // Strictly filter out groups, newsletters, broadcasts, lid, hosted, status
-          if (
-            rawId.includes('@g.us') ||
-            rawId.includes('@newsletter') ||
-            rawId.includes('@broadcast') ||
-            rawId.includes('@lid') ||
-            rawId.includes('@hosted') ||
-            rawId.includes('status')
-          ) {
-            continue;
+          if (!chatsRes && offset === 0) {
+            chatsRes = await client.get(`/chat/findChats/${encodeURIComponent(instance)}?limit=${PAGE_LIMIT}&offset=${offset}`).catch(() => null);
           }
 
-          const cleanPhone = normalizePhoneNumber(rawId);
-          if (!cleanPhone) continue;
+          const rawChats = extractList(chatsRes?.data);
+          console.log(`[Evolution Sync] findChats (offset ${offset}) returned ${rawChats.length} items`);
 
-          const rawName = item.name || item.pushName || item.verifiedName || item.notify || null;
-          const cleanName = rawName && String(rawName).trim() && !isPlaceholderName(rawName, cleanPhone)
-            ? String(rawName).trim()
-            : null;
+          if (rawChats.length === 0) {
+            hasMoreChats = false;
+            break;
+          }
 
-          const pic = item.profilePictureUrl || item.profilePicUrl || item.picture || item.url || null;
+          for (const item of rawChats) {
+            processItem(item);
+          }
 
-          if (contactsMap.has(cleanPhone)) {
-            const existing = contactsMap.get(cleanPhone)!;
-            // Enrich with name or picture if previously missing
-            if (!existing.name && cleanName) existing.name = cleanName;
-            if (!existing.profilePictureUrl && pic) {
-              existing.profilePictureUrl = pic;
-              existing.profilePicUrl = pic;
-            }
+          if (rawChats.length < PAGE_LIMIT) {
+            hasMoreChats = false;
           } else {
-            contactsMap.set(cleanPhone, {
-              cleanPhone,
-              phone: cleanPhone,
-              name: cleanName,
-              pushName: item.pushName || null,
-              profilePictureUrl: pic,
-              profilePicUrl: pic,
-            });
+            offset += PAGE_LIMIT;
           }
+
+          if (offset > 20000) break; // Safety cutoff
+        } catch (err: any) {
+          console.warn(`[Evolution findChats error at offset ${offset}]:`, err.message);
+          hasMoreChats = false;
         }
-      } catch (err: any) {
-        console.warn('[Evolution fetchAllContacts chats error]:', err.message);
       }
 
       console.log(`[Evolution Sync] Total unique valid contacts unified: ${contactsMap.size}`);

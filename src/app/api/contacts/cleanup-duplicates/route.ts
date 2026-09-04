@@ -31,6 +31,12 @@ export async function POST(req: NextRequest) {
         invalidContactIds.push(c.id);
         continue;
       }
+      // Foreign bot / spam check: If not Turkish (+90), not custom name, and has no real name
+      const hasRealName = !isPlaceholderName(c.name, norm);
+      if (!norm.startsWith('+90') && !c.isCustomName && !hasRealName) {
+        invalidContactIds.push(c.id);
+        continue;
+      }
       if (!phoneToContactsMap.has(norm)) {
         phoneToContactsMap.set(norm, []);
       }
@@ -124,6 +130,11 @@ export async function POST(req: NextRequest) {
     for (const s of allSubs) {
       const norm = normalizePhoneNumber(s.phone);
       if (!norm) {
+        invalidSubIds.push(s.id);
+        continue;
+      }
+      const hasRealName = !isPlaceholderName(s.name, norm);
+      if (!norm.startsWith('+90') && !hasRealName) {
         invalidSubIds.push(s.id);
         continue;
       }
