@@ -19,21 +19,7 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10000', 10);
     const skip = (page - 1) * limit;
 
-    const invalidNameFilters = [
-      { name: '' },
-      { name: { startsWith: '.' } },
-      { name: { startsWith: ',' } },
-      { name: { startsWith: '-' } },
-      { name: { startsWith: '_' } },
-      { name: { startsWith: '+' } },
-      { name: { startsWith: '05' } },
-      { name: { startsWith: '90' } },
-    ];
-
-    const andConditions: any[] = [
-      { name: { not: null } },
-      { NOT: invalidNameFilters },
-    ];
+    const andConditions: any[] = [];
 
     if (search) {
       andConditions.push({
@@ -56,9 +42,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const where: any = {
-      AND: andConditions,
-    };
+    const where: any = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [rawContacts, total] = await Promise.all([
       prisma.contact.findMany({
