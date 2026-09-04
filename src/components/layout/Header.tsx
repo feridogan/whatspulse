@@ -71,7 +71,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-[#23292e] bg-[#0b0d0e]/95 backdrop-blur-md px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+        <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-3">
           {/* Left: Brand / Title / Mobile Menu */}
           <div className="flex items-center gap-3">
             {onMenuToggle && (
@@ -104,7 +104,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
                 className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/35 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
               >
                 <Sparkles className="w-2.5 h-2.5 text-[#d4af37]" />
-                <span>v2.5.2</span>
+                <span>v2.6.002</span>
               </button>
             </div>
 

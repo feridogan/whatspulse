@@ -35,6 +35,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { formatPhoneDisplay, formatPhoneNumber, normalizePhone } from '@/lib/utils';
+import { isValidContactName } from '@/lib/phone-utils';
 import * as XLSX from 'xlsx';
 
 export default function ContactsPage() {
@@ -124,8 +125,10 @@ export default function ContactsPage() {
 
       const res = await fetch(`/api/contacts?${query.toString()}`);
       const data = await res.json();
-      setContacts(data.contacts || []);
-      setTotal(data.total || 0);
+      const raw = data.contacts || [];
+      const valid = raw.filter((c: any) => isValidContactName(c.name, c.phone));
+      setContacts(valid);
+      setTotal(data.total ?? valid.length);
     } catch (err) {
       console.error('Kişiler yüklenirken hata:', err);
     } finally {
@@ -1144,11 +1147,19 @@ export default function ContactsPage() {
       {activeTab === 'contacts' ? (
         /* Contacts Table View */
         <div className="bg-[#111b21] border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="w-full overflow-x-auto">
-            <table className="w-full table-auto text-left border-collapse">
+          <div className="w-full overflow-x-auto min-w-0">
+            <table className="w-full table-fixed text-left border-collapse">
+              <colgroup>
+                <col className="w-12" />
+                <col className="w-[30%] min-w-[150px]" />
+                <col className="w-[20%] min-w-[130px]" />
+                <col className="w-[18%] min-w-[100px]" />
+                <col className="w-[10%] min-w-[70px]" />
+                <col className="w-[22%] min-w-[120px]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-800 bg-[#14232c]/60 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                  <th className="p-4 w-12 text-center align-middle">
+                  <th className="py-3 px-2 text-center align-middle">
                     <button
                       onClick={() => {
                         if (selectedContactIds.length === contacts.length) {
@@ -1166,11 +1177,11 @@ export default function ContactsPage() {
                       )}
                     </button>
                   </th>
-                  <th className="p-4 w-auto min-w-[220px] align-middle">Kişi Bilgisi</th>
-                  <th className="p-4 w-44 whitespace-nowrap align-middle">Telefon Numarası</th>
-                  <th className="p-4 w-40 truncate align-middle">Dahil Olduğu Gruplar</th>
-                  <th className="p-4 w-28 text-center align-middle">Durum</th>
-                  <th className="p-4 w-36 text-right pr-4 align-middle">İşlemler</th>
+                  <th className="py-3 px-3 align-middle">Kişi Bilgisi</th>
+                  <th className="py-3 px-3 align-middle">Telefon Numarası</th>
+                  <th className="py-3 px-2 align-middle">Dahil Olduğu Gruplar</th>
+                  <th className="py-3 px-2 text-center align-middle">Durum</th>
+                  <th className="py-3 pr-3 text-right align-middle">İşlemler</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/60 text-xs">
@@ -1236,7 +1247,7 @@ export default function ContactsPage() {
                         }`}
                       >
                         {/* Checkbox */}
-                        <td className="p-4 w-12 text-center align-middle">
+                        <td className="py-3 px-2 text-center align-middle">
                           <button
                             onClick={() => {
                               if (isSelected) {
@@ -1256,52 +1267,52 @@ export default function ContactsPage() {
                         </td>
 
                         {/* Name & Avatar */}
-                        <td className="p-4 w-auto min-w-[220px] align-middle">
-                          <div className="flex items-center gap-3">
+                        <td className="py-3 px-3 align-middle min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             {c.avatar ? (
                               <img
                                 src={c.avatar}
                                 alt={c.name}
-                                className="w-9 h-9 rounded-xl object-cover border border-emerald-500/30 shrink-0"
+                                className="w-8 h-8 rounded-lg object-cover border border-emerald-500/30 shrink-0"
                                 onError={(e: any) => {
                                   e.currentTarget.style.display = 'none';
                                 }}
                               />
                             ) : (
-                              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
+                              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
                                 {c.name?.slice(0, 2).toUpperCase() || 'K'}
                               </div>
                             )}
                             <div className="min-w-0 flex-1">
-                              <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
+                              <div className="font-bold text-white text-xs truncate flex items-center gap-1">
                                 <span className="truncate">{c.name}</span>
                                 {c.avatar && (
-                                  <span className="text-[10px] text-emerald-400 font-mono shrink-0" title="WhatsApp Profili Doğrulandı">✓</span>
+                                  <span className="text-[9px] text-emerald-400 font-mono shrink-0" title="WhatsApp Profili Doğrulandı">✓</span>
                                 )}
                               </div>
                               {c.email && (
-                                <div className="text-[11px] text-gray-400 truncate">{c.email}</div>
+                                <div className="text-[10px] text-gray-400 truncate">{c.email}</div>
                               )}
                               {c.notes && (
-                                <div className="text-[10px] text-gray-500 truncate max-w-xs">{c.notes}</div>
+                                <div className="text-[10px] text-gray-500 truncate">{c.notes}</div>
                               )}
                             </div>
                           </div>
                         </td>
 
                         {/* Phone */}
-                        <td className="p-4 w-44 whitespace-nowrap font-mono font-semibold text-emerald-400 align-middle">
+                        <td className="py-3 px-3 font-mono font-semibold text-xs text-emerald-400 align-middle whitespace-nowrap truncate">
                           {formatPhoneDisplay(c.phone)}
                         </td>
 
                         {/* Groups */}
-                        <td className="p-4 w-40 truncate align-middle">
-                          <div className="flex flex-wrap gap-1.5 max-w-xs">
+                        <td className="py-3 px-2 align-middle min-w-0">
+                          <div className="flex flex-wrap gap-1 min-w-0">
                             {c.groups && c.groups.length > 0 ? (
-                              c.groups.map((g: any) => (
+                              c.groups.slice(0, 2).map((g: any) => (
                                 <span
                                   key={g.groupId || g.group?.id}
-                                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border truncate max-w-[120px]"
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold border truncate max-w-[90px]"
                                   style={{
                                     backgroundColor: `${g.group?.color || '#10b981'}15`,
                                     borderColor: `${g.group?.color || '#10b981'}40`,
@@ -1312,35 +1323,38 @@ export default function ContactsPage() {
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[11px] text-gray-500">-</span>
+                              <span className="text-[10px] text-gray-500">-</span>
+                            )}
+                            {c.groups && c.groups.length > 2 && (
+                              <span className="text-[9px] text-gray-400">+{c.groups.length - 2}</span>
                             )}
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td className="p-4 w-28 text-center align-middle">
+                        <td className="py-3 px-2 text-center align-middle">
                           <div className="flex justify-center">
                             {c.isBlacklisted ? (
-                              <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
-                                <ShieldAlert className="w-3 h-3" /> Kara Liste
+                              <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-bold flex items-center gap-1 w-fit whitespace-nowrap">
+                                <ShieldAlert className="w-2.5 h-2.5" /> Kara Liste
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
-                                <ShieldCheck className="w-3 h-3" /> Aktif
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold flex items-center gap-1 w-fit whitespace-nowrap">
+                                <ShieldCheck className="w-2.5 h-2.5" /> Aktif
                               </span>
                             )}
                           </div>
                         </td>
 
                         {/* Actions */}
-                        <td className="p-4 w-36 text-right pr-4 align-middle">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-3 pr-3 text-right align-middle">
+                          <div className="flex items-center justify-end gap-1">
                             {/* 🔄 WhatsApp Verisini Çek / Kişiyi Güncelle */}
                             <button
                               type="button"
                               onClick={() => handleSyncSingleContact(c.id)}
                               disabled={syncingContactId === c.id}
-                              className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                              className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0 ${
                                 syncedSuccessIds.includes(c.id)
                                   ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
                                   : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/25'
@@ -1359,7 +1373,7 @@ export default function ContactsPage() {
                             {/* 💬 Doğrudan Sohbet Başlat */}
                             <Link
                               href={`/chat?phone=${encodeURIComponent(c.phone)}`}
-                              className="p-2 rounded-xl text-[#d4af37] hover:text-yellow-300 hover:bg-yellow-500/10 transition-colors shrink-0"
+                              className="p-1.5 rounded-lg text-[#d4af37] hover:text-yellow-300 hover:bg-yellow-500/10 transition-colors shrink-0"
                               title="Canlı Sohbet Başlat / Mesaj Gönder"
                             >
                               <MessageSquare className="w-3.5 h-3.5" />
@@ -1369,7 +1383,7 @@ export default function ContactsPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenContactModal(c)}
-                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer shrink-0"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer shrink-0"
                               title="Düzenle"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1379,7 +1393,7 @@ export default function ContactsPage() {
                             <button
                               type="button"
                               onClick={() => handleDeleteContact(c.id)}
-                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
                               title="Rehberden Sil"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

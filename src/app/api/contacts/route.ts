@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 import { ensureDbSchemaSync } from '@/lib/db-sync';
+import { isValidContactName } from '@/lib/phone-utils';
 import { POST as cleanupDuplicatesHandler } from './cleanup-duplicates/route';
 import { POST as cleanupInvalidHandler } from './cleanup-invalid/route';
 
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
       AND: andConditions,
     };
 
-    const [contacts, total] = await Promise.all([
+    const [rawContacts, total] = await Promise.all([
       prisma.contact.findMany({
         where,
         include: {
@@ -76,11 +77,23 @@ export async function GET(req: NextRequest) {
       prisma.contact.count({ where }),
     ]);
 
+    // Strict in-memory validation: NO contacts starting with '.', empty names, or invalid symbols ever get returned
+    const validContacts = rawContacts.filter((c) => isValidContactName(c.name, c.phone));
+    const invalidContacts = rawContacts.filter((c) => !isValidContactName(c.name, c.phone));
+
+    // Auto-clean any invalid contacts in the background
+    if (invalidContacts.length > 0) {
+      const invalidIds = invalidContacts.map((c) => c.id);
+      prisma.contactGroup.deleteMany({ where: { contactId: { in: invalidIds } } })
+        .then(() => prisma.contact.deleteMany({ where: { id: { in: invalidIds } } }))
+        .catch(() => {});
+    }
+
     const res = NextResponse.json({
-      contacts,
-      total,
+      contacts: validContacts,
+      total: validContacts.length,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(validContacts.length / limit),
     });
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     return res;

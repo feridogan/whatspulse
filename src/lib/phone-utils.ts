@@ -67,35 +67,33 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
 }
 
 /**
- * Validates whether a name is a genuine human/business contact name,
- * rejecting empty names, direct phone numbers, and invalid punctuation like '.', ',', '-', '_'
+ * Validates whether a name is a genuine human/business contact name.
+ * Must start with a real letter and contain at least 2 letters.
+ * Rejects empty names, symbols, leading dots/punctuation, and numbers.
  */
 export function isValidContactName(name: string | null | undefined, phone?: string): boolean {
   if (!name || typeof name !== 'string') return false;
   const trimmed = name.trim();
-  if (!trimmed) return false;
+  if (!trimmed || trimmed.length < 2) return false;
 
-  // Invalid punctuation starts or common phone number prefixes
-  if (
-    trimmed.startsWith('.') ||
-    trimmed.startsWith(',') ||
-    trimmed.startsWith('-') ||
-    trimmed.startsWith('_') ||
-    trimmed.startsWith('+') ||
-    trimmed.startsWith('05') ||
-    trimmed.startsWith('90') ||
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('*')
-  ) {
+  // Must strictly start with a letter (Latin, Turkish, or other alphabets)
+  // Rejects anything starting with '.', ',', '-', '_', '+', numbers, emojis, etc.
+  if (!/^\p{L}/u.test(trimmed)) {
     return false;
   }
 
-  // Must contain at least one letter (Latin, Turkish, or other alphabets)
-  if (!/[a-zA-ZçğıöşüÇĞİÖŞÜ\u00C0-\u024F\u1E00-\u1EFF]/.test(trimmed)) {
+  // Must contain at least two letters
+  const letterCount = (trimmed.match(/\p{L}/gu) || []).length;
+  if (letterCount < 2) {
     return false;
   }
 
-  // If phone is provided, check if it matches phone digits
+  // Reject strings made up only of phone characters / digits / separators
+  if (/^[\d\s+\-()./]+$/.test(trimmed)) {
+    return false;
+  }
+
+  // If phone is provided, check if digits match the phone number
   if (phone) {
     const cleanName = trimmed.replace(/\D/g, '');
     const cleanPhone = phone.replace(/\D/g, '');

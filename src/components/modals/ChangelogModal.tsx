@@ -25,7 +25,7 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
 
   const versions = [
     {
-      version: 'v2.5.2',
+      version: 'v2.6.002',
       date: '04 Eylül 2026',
       badge: 'GÜNCEL SÜRÜM',
       badgeColor: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30',
@@ -37,18 +37,18 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
         },
         {
           title: '🧹 İsimsiz & Geçersiz Kayıt Temizliği',
-          desc: 'İsmi olmayan, sadece numaradan ibaret olan ve sembollerle (., -, vb.) başlayan geçersiz kayıtlar rehberden temizlendi.',
+          desc: 'İsmi olmayan, sadece numaradan ibaret olan ve nokta (.) veya sembollerle başlayan geçersiz kayıtlar rehberden temizlendi.',
           icon: ShieldCheck,
         },
         {
           title: '🛡️ Yalnızca İsimli Kişiler Senkronizasyonu',
-          desc: 'WhatsApp senkronizasyonuna "Yalnızca İsimli Kişiler" filtresi eklendi; çöp kayıtların içeri aktarılması engellendi.',
+          desc: 'WhatsApp senkronizasyonuna ve rehber API\'sine "Yalnızca İsimli Kişiler" filtresi eklendi; çöp kayıtlar engellendi.',
           icon: Users,
         },
       ],
     },
     {
-      version: 'v2.5.1',
+      version: 'v2.6.001',
       date: '03 Eylül 2026',
       badge: 'ÖNCEKİ SÜRÜM',
       badgeColor: 'bg-gray-700/30 text-gray-400 border-gray-600/30',

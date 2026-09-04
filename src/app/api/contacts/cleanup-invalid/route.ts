@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { ensureDbSchemaSync } from "@/lib/db-sync";
+import { isValidContactName } from "@/lib/phone-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -13,26 +14,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
     }
 
-    const invalidCondition = {
-      OR: [
-        { name: null },
-        { name: "" },
-        { name: { startsWith: "." } },
-        { name: { startsWith: "," } },
-        { name: { startsWith: "-" } },
-        { name: { startsWith: "_" } },
-        { name: { startsWith: "+" } },
-        { name: { startsWith: "05" } },
-        { name: { startsWith: "90" } },
-      ],
-    };
-
-    // Find IDs to clean up relations
-    const invalidContacts = await prisma.contact.findMany({
-      where: invalidCondition,
-      select: { id: true },
+    const allContacts = await prisma.contact.findMany({
+      select: { id: true, name: true, phone: true },
     });
-    const invalidContactIds = invalidContacts.map((c) => c.id);
+    const invalidContactIds = allContacts
+      .filter((c) => !isValidContactName(c.name, c.phone))
+      .map((c) => c.id);
 
     if (invalidContactIds.length > 0) {
       await prisma.contactGroup.deleteMany({
@@ -44,11 +31,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Clean from subscribers as well
-    const invalidSubs = await prisma.subscriber.findMany({
-      where: invalidCondition,
-      select: { id: true },
+    const allSubs = await prisma.subscriber.findMany({
+      select: { id: true, name: true, phone: true },
     });
-    const invalidSubIds = invalidSubs.map((s) => s.id);
+    const invalidSubIds = allSubs
+      .filter((s) => !isValidContactName(s.name, s.phone))
+      .map((s) => s.id);
 
     if (invalidSubIds.length > 0) {
       await prisma.subscriberGroup.deleteMany({
