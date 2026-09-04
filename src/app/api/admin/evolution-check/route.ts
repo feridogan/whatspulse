@@ -43,12 +43,19 @@ export async function GET(req: NextRequest) {
     try {
       const res = await client.post(`/chat/findContacts/${config.instance}`, { where: {} });
       const isArr = Array.isArray(res.data);
-      const count = isArr ? res.data.length : (res.data?.length || res.data?.contacts?.length || Object.keys(res.data || {}).length);
+      const allItems: any[] = isArr ? res.data : [];
+      
+      const lidContacts = allItems.filter(c => String(c.remoteJid || c.id || '').includes('@lid'));
+      const sWhatsappContacts = allItems.filter(c => String(c.remoteJid || c.id || '').includes('@s.whatsapp.net'));
+      const groupContacts = allItems.filter(c => String(c.remoteJid || c.id || '').includes('@g.us'));
+
       contactsPost = {
-        status: res.status,
-        isArray: isArr,
-        count,
-        sample: isArr ? res.data.slice(0, 3) : res.data,
+        total: allItems.length,
+        sWhatsappCount: sWhatsappContacts.length,
+        lidCount: lidContacts.length,
+        groupCount: groupContacts.length,
+        sampleSWhatsapp: sWhatsappContacts.slice(0, 3),
+        sampleLid: lidContacts.slice(0, 5),
       };
     } catch (e: any) {
       contactsPost = { error: e.message, data: e.response?.data };
