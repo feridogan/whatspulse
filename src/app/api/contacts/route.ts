@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { normalizePhone, formatPhoneNumber } from '@/lib/utils';
 import { ensureDbSchemaSync } from '@/lib/db-sync';
 import { POST as cleanupDuplicatesHandler } from './cleanup-duplicates/route';
+import { POST as cleanupInvalidHandler } from './cleanup-invalid/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,24 +18,46 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10000', 10);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const invalidNameFilters = [
+      { name: '' },
+      { name: { startsWith: '.' } },
+      { name: { startsWith: ',' } },
+      { name: { startsWith: '-' } },
+      { name: { startsWith: '_' } },
+      { name: { startsWith: '+' } },
+      { name: { startsWith: '05' } },
+      { name: { startsWith: '90' } },
+    ];
+
+    const andConditions: any[] = [
+      { name: { not: null } },
+      { NOT: invalidNameFilters },
+    ];
 
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { notes: { contains: search, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { notes: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
 
     if (groupId) {
-      where.groups = {
-        some: {
-          groupId: groupId,
+      andConditions.push({
+        groups: {
+          some: {
+            groupId: groupId,
+          },
         },
-      };
+      });
     }
+
+    const where: any = {
+      AND: andConditions,
+    };
 
     const [contacts, total] = await Promise.all([
       prisma.contact.findMany({
@@ -70,6 +93,10 @@ export async function POST(req: NextRequest) {
   try {
     await ensureDbSchemaSync();
     const body = await req.json().catch(() => ({}));
+
+    if (body?.action === 'cleanup-invalid') {
+      return cleanupInvalidHandler(req);
+    }
 
     if (body?.action === 'cleanup-duplicates' || body?.action === 'cleanup') {
       return cleanupDuplicatesHandler(req);

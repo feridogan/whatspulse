@@ -4,7 +4,7 @@ import { ensureDbSchemaSync } from "@/lib/db-sync";
 import { EvolutionService } from "@/lib/evolution";
 import { syncWhatsAppContactInfo } from "@/lib/contact-sync";
 import { requireAuth } from "@/lib/auth";
-import { normalizePhoneNumber } from "@/lib/phone-utils";
+import { normalizePhoneNumber, isValidContactName } from "@/lib/phone-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Fetch all contacts & chats from Evolution API
-    const waContacts = await EvolutionService.fetchAllContacts();
+    const rawWaContacts = await EvolutionService.fetchAllContacts();
+    // Yalnızca geçerli isimli kişileri filtrele
+    const waContacts = rawWaContacts.filter(c => isValidContactName(c.name, c.cleanPhone || c.phone));
 
     // 2. Load existing contacts to protect isCustomName and count created vs updated
     const existingContacts = isReset 

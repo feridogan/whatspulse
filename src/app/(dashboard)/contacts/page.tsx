@@ -395,6 +395,7 @@ export default function ContactsPage() {
   };
 
   const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+  const [isCleaningInvalid, setIsCleaningInvalid] = useState(false);
 
   // Clean up duplicates and invalid bot/spam numbers
   const handleCleanupDuplicates = async () => {
@@ -429,6 +430,42 @@ export default function ContactsPage() {
       showToast('Temizleme hatası: ' + err.message, 'error');
     } finally {
       setIsCleaningDuplicates(false);
+    }
+  };
+
+  // Clean up invalid contacts (empty names, number-only names, leading punctuation)
+  const handleCleanupInvalid = async () => {
+    if (!confirm('İsmi olmayan, sadece numaradan ibaret olan veya geçersiz karakterlerle (., -, 05 vb.) başlayan kayıtlar rehberden temizlenecek. Onaylıyor musunuz?')) return;
+    try {
+      setIsCleaningInvalid(true);
+      showToast('Geçersiz kayıtlar taranıyor...', 'success');
+      let res = await fetch('/api/contacts/cleanup-invalid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).catch(() => null);
+
+      let data = res && res.ok ? await res.json().catch(() => null) : null;
+      if (!data || !data.success) {
+        res = await fetch('/api/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cleanup-invalid' }),
+        });
+        data = await res.json();
+      }
+
+      if (data && data.success) {
+        showToast(data.message || `Geçersiz kayıtlar temizlendi (${data.deletedCount ?? 0} kişi silindi).`);
+        await loadContacts();
+        await loadGroups();
+      } else {
+        showToast(data?.error || 'Temizleme işlemi sırasında hata oluştu.', 'error');
+      }
+    } catch (err: any) {
+      showToast('Temizleme hatası: ' + err.message, 'error');
+    } finally {
+      setIsCleaningInvalid(false);
     }
   };
 
@@ -772,7 +809,7 @@ export default function ContactsPage() {
             <span>{isSyncingAll ? 'Kişiler Çekiliyor...' : "WhatsApp'tan Kişileri Çek"}</span>
           </button>
 
-          {/* 🧹 Mükerrerleri ve Çöp Numaraları Temizle */}
+          {/* 🧹 Mükerrerleri Temizle */}
           <button
             type="button"
             onClick={handleCleanupDuplicates}
@@ -781,7 +818,19 @@ export default function ContactsPage() {
             title="Mükerrer kayıtları birleştirir ve geçersiz yabancı spam numaralarını siler"
           >
             <Sparkles className={`w-4 h-4 text-amber-400 ${isCleaningDuplicates ? 'animate-spin' : ''}`} />
-            <span>{isCleaningDuplicates ? 'Temizleniyor...' : '🧹 Mükerrerleri ve Çöp Numaraları Temizle'}</span>
+            <span>{isCleaningDuplicates ? 'Temizleniyor...' : '🧹 Mükerrerleri Temizle'}</span>
+          </button>
+
+          {/* 🧹 Geçersizleri Temizle */}
+          <button
+            type="button"
+            onClick={handleCleanupInvalid}
+            disabled={isCleaningInvalid}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 text-xs font-bold border border-rose-500/35 transition-all shadow-md cursor-pointer disabled:opacity-50"
+            title="İsmi olmayan, sadece numara olan ve geçersiz karakterlerle başlayan kişileri siler"
+          >
+            <Trash2 className={`w-4 h-4 text-rose-400 ${isCleaningInvalid ? 'animate-spin' : ''}`} />
+            <span>{isCleaningInvalid ? 'Temizleniyor...' : '🧹 Geçersizleri Temizle'}</span>
           </button>
 
           <button
@@ -1095,11 +1144,11 @@ export default function ContactsPage() {
       {activeTab === 'contacts' ? (
         /* Contacts Table View */
         <div className="bg-[#111b21] border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full table-auto text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-800 bg-[#14232c]/60 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                  <th className="p-4 w-10 text-center">
+                  <th className="p-4 w-12 text-center align-middle">
                     <button
                       onClick={() => {
                         if (selectedContactIds.length === contacts.length) {
@@ -1117,24 +1166,23 @@ export default function ContactsPage() {
                       )}
                     </button>
                   </th>
-                  <th className="p-4">Kişi Bilgisi</th>
-                  <th className="p-4">Telefon Numarası</th>
-                  <th className="p-4">Dahil Olduğu Gruplar</th>
-                  <th className="p-4">Özel Değişkenler</th>
-                  <th className="p-4">Durum</th>
-                  <th className="p-4 text-right">İşlemler</th>
+                  <th className="p-4 w-auto min-w-[220px] align-middle">Kişi Bilgisi</th>
+                  <th className="p-4 w-44 whitespace-nowrap align-middle">Telefon Numarası</th>
+                  <th className="p-4 w-40 truncate align-middle">Dahil Olduğu Gruplar</th>
+                  <th className="p-4 w-28 text-center align-middle">Durum</th>
+                  <th className="p-4 w-36 text-right pr-4 align-middle">İşlemler</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/60 text-xs">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-gray-400">
+                    <td colSpan={6} className="p-12 text-center text-gray-400">
                       Yükleniyor...
                     </td>
                   </tr>
                 ) : contacts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-16 text-center text-gray-400 space-y-4">
+                    <td colSpan={6} className="p-16 text-center text-gray-400 space-y-4">
                       <Users className="w-12 h-12 text-gray-600 mx-auto" />
                       <p className="text-base font-bold text-white">Henüz Kayıtlı Kişi Bulunamadı</p>
                       <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
@@ -1179,8 +1227,6 @@ export default function ContactsPage() {
                 ) : (
                   contacts.map((c) => {
                     const isSelected = selectedContactIds.includes(c.id);
-                    const customObj = (c.customFields && typeof c.customFields === 'object') ? c.customFields : {};
-                    const customEntries = Object.entries(customObj);
 
                     return (
                       <tr
@@ -1190,7 +1236,7 @@ export default function ContactsPage() {
                         }`}
                       >
                         {/* Checkbox */}
-                        <td className="p-4 text-center">
+                        <td className="p-4 w-12 text-center align-middle">
                           <button
                             onClick={() => {
                               if (isSelected) {
@@ -1210,7 +1256,7 @@ export default function ContactsPage() {
                         </td>
 
                         {/* Name & Avatar */}
-                        <td className="p-4">
+                        <td className="p-4 w-auto min-w-[220px] align-middle">
                           <div className="flex items-center gap-3">
                             {c.avatar ? (
                               <img
@@ -1226,11 +1272,11 @@ export default function ContactsPage() {
                                 {c.name?.slice(0, 2).toUpperCase() || 'K'}
                               </div>
                             )}
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
-                                <span>{c.name}</span>
+                                <span className="truncate">{c.name}</span>
                                 {c.avatar && (
-                                  <span className="text-[10px] text-emerald-400 font-mono" title="WhatsApp Profili Doğrulandı">✓</span>
+                                  <span className="text-[10px] text-emerald-400 font-mono shrink-0" title="WhatsApp Profili Doğrulandı">✓</span>
                                 )}
                               </div>
                               {c.email && (
@@ -1244,18 +1290,18 @@ export default function ContactsPage() {
                         </td>
 
                         {/* Phone */}
-                        <td className="p-4 font-mono font-semibold text-emerald-400">
+                        <td className="p-4 w-44 whitespace-nowrap font-mono font-semibold text-emerald-400 align-middle">
                           {formatPhoneDisplay(c.phone)}
                         </td>
 
                         {/* Groups */}
-                        <td className="p-4">
+                        <td className="p-4 w-40 truncate align-middle">
                           <div className="flex flex-wrap gap-1.5 max-w-xs">
                             {c.groups && c.groups.length > 0 ? (
                               c.groups.map((g: any) => (
                                 <span
                                   key={g.groupId || g.group?.id}
-                                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border truncate max-w-[120px]"
                                   style={{
                                     backgroundColor: `${g.group?.color || '#10b981'}15`,
                                     borderColor: `${g.group?.color || '#10b981'}40`,
@@ -1271,49 +1317,30 @@ export default function ContactsPage() {
                           </div>
                         </td>
 
-                        {/* Custom Fields */}
-                        <td className="p-4">
-                          <div className="flex flex-wrap gap-1 max-w-xs">
-                            {customEntries.length > 0 ? (
-                              customEntries.slice(0, 3).map(([k, v]) => (
-                                <span
-                                  key={k}
-                                  className="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] text-gray-300 border border-gray-700 truncate"
-                                >
-                                  <span className="text-gray-500 font-semibold">{k}:</span> {String(v)}
-                                </span>
-                              ))
+                        {/* Status */}
+                        <td className="p-4 w-28 text-center align-middle">
+                          <div className="flex justify-center">
+                            {c.isBlacklisted ? (
+                              <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                                <ShieldAlert className="w-3 h-3" /> Kara Liste
+                              </span>
                             ) : (
-                              <span className="text-[11px] text-gray-600">-</span>
-                            )}
-                            {customEntries.length > 3 && (
-                              <span className="text-[10px] text-gray-500">+{customEntries.length - 3}</span>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                                <ShieldCheck className="w-3 h-3" /> Aktif
+                              </span>
                             )}
                           </div>
                         </td>
 
-                        {/* Status */}
-                        <td className="p-4">
-                          {c.isBlacklisted ? (
-                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
-                              <ShieldAlert className="w-3 h-3" /> Kara Liste
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
-                              <ShieldCheck className="w-3 h-3" /> Aktif
-                            </span>
-                          )}
-                        </td>
-
                         {/* Actions */}
-                        <td className="p-4 text-right">
+                        <td className="p-4 w-36 text-right pr-4 align-middle">
                           <div className="flex items-center justify-end gap-1.5">
                             {/* 🔄 WhatsApp Verisini Çek / Kişiyi Güncelle */}
                             <button
                               type="button"
                               onClick={() => handleSyncSingleContact(c.id)}
                               disabled={syncingContactId === c.id}
-                              className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 text-[11px] font-semibold ${
+                              className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
                                 syncedSuccessIds.includes(c.id)
                                   ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
                                   : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/25'
@@ -1321,27 +1348,18 @@ export default function ContactsPage() {
                               title="Bu Kişiyi Güncelle / WhatsApp Verisini Çek"
                             >
                               {syncingContactId === c.id ? (
-                                <>
-                                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-                                  <span className="text-[10px]">Çekiliyor</span>
-                                </>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                               ) : syncedSuccessIds.includes(c.id) ? (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                  <span className="text-[10px]">Güncellendi</span>
-                                </>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                               ) : (
-                                <>
-                                  <RefreshCw className="w-3 h-3" />
-                                  <span className="text-[10px]">Kişiyi Güncelle</span>
-                                </>
+                                <RefreshCw className="w-3.5 h-3.5" />
                               )}
                             </button>
 
                             {/* 💬 Doğrudan Sohbet Başlat */}
                             <Link
                               href={`/chat?phone=${encodeURIComponent(c.phone)}`}
-                              className="p-2 rounded-xl text-[#d4af37] hover:text-yellow-300 hover:bg-yellow-500/10 transition-colors"
+                              className="p-2 rounded-xl text-[#d4af37] hover:text-yellow-300 hover:bg-yellow-500/10 transition-colors shrink-0"
                               title="Canlı Sohbet Başlat / Mesaj Gönder"
                             >
                               <MessageSquare className="w-3.5 h-3.5" />
@@ -1351,7 +1369,7 @@ export default function ContactsPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenContactModal(c)}
-                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
+                              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer shrink-0"
                               title="Düzenle"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1361,7 +1379,7 @@ export default function ContactsPage() {
                             <button
                               type="button"
                               onClick={() => handleDeleteContact(c.id)}
-                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              className="p-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
                               title="Rehberden Sil"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

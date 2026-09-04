@@ -1,6 +1,6 @@
 import axios from 'axios';
 import prisma from './prisma';
-import { normalizePhoneNumber, isPlaceholderName } from './phone-utils';
+import { normalizePhoneNumber, isPlaceholderName, isValidContactName } from './phone-utils';
 
 interface EvolutionConfig {
   apiUrl: string;
@@ -340,8 +340,8 @@ export class EvolutionService {
           ? String(rawName).trim()
           : null;
 
-        // Foreign Spam/Bot Filtering: If the number is not Turkish (+90) and doesn't have a valid contact name, skip it
-        if (!cleanPhone.startsWith('+90') && !cleanName) {
+        // Yalnızca İsimli Kişiler Filtresi: Rehber adı yoksa veya geçersiz sembol/numara ise içeri alma
+        if (!cleanName || !isValidContactName(cleanName, cleanPhone)) {
           return;
         }
 

@@ -67,11 +67,50 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
 }
 
 /**
+ * Validates whether a name is a genuine human/business contact name,
+ * rejecting empty names, direct phone numbers, and invalid punctuation like '.', ',', '-', '_'
+ */
+export function isValidContactName(name: string | null | undefined, phone?: string): boolean {
+  if (!name || typeof name !== 'string') return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+
+  // Invalid punctuation starts or common phone number prefixes
+  if (
+    trimmed.startsWith('.') ||
+    trimmed.startsWith(',') ||
+    trimmed.startsWith('-') ||
+    trimmed.startsWith('_') ||
+    trimmed.startsWith('+') ||
+    trimmed.startsWith('05') ||
+    trimmed.startsWith('90') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('*')
+  ) {
+    return false;
+  }
+
+  // Must contain at least one letter (Latin, Turkish, or other alphabets)
+  if (!/[a-zA-ZçğıöşüÇĞİÖŞÜ\u00C0-\u024F\u1E00-\u1EFF]/.test(trimmed)) {
+    return false;
+  }
+
+  // If phone is provided, check if it matches phone digits
+  if (phone) {
+    const cleanName = trimmed.replace(/\D/g, '');
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanName && cleanPhone && (cleanName === cleanPhone || cleanPhone.endsWith(cleanName))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Checks if a name is just a phone number or placeholder
  */
 export function isPlaceholderName(name: string | null | undefined, phone: string): boolean {
-  if (!name || !name.trim()) return true;
-  const cleanName = name.trim().replace(/[^\w]/g, '');
-  const cleanPhone = phone.replace(/[^\d]/g, '');
-  return cleanName === cleanPhone || cleanName === `+${cleanPhone}` || name.startsWith('+');
+  return !isValidContactName(name, phone);
 }
+

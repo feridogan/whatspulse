@@ -25,10 +25,33 @@ export function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
 
   const versions = [
     {
-      version: 'v2.6.001',
-      date: '03 Eylül 2026',
+      version: 'v2.5.2',
+      date: '04 Eylül 2026',
       badge: 'GÜNCEL SÜRÜM',
       badgeColor: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/30',
+      highlights: [
+        {
+          title: '📐 Responsive Tablo & Ekrana Tam Uyum',
+          desc: 'Kişiler tablosu responsive grid yapısı yenilendi; ekran taşması ve numara satır kırılmaları düzeltildi.',
+          icon: Sparkles,
+        },
+        {
+          title: '🧹 İsimsiz & Geçersiz Kayıt Temizliği',
+          desc: 'İsmi olmayan, sadece numaradan ibaret olan ve sembollerle (., -, vb.) başlayan geçersiz kayıtlar rehberden temizlendi.',
+          icon: ShieldCheck,
+        },
+        {
+          title: '🛡️ Yalnızca İsimli Kişiler Senkronizasyonu',
+          desc: 'WhatsApp senkronizasyonuna "Yalnızca İsimli Kişiler" filtresi eklendi; çöp kayıtların içeri aktarılması engellendi.',
+          icon: Users,
+        },
+      ],
+    },
+    {
+      version: 'v2.5.1',
+      date: '03 Eylül 2026',
+      badge: 'ÖNCEKİ SÜRÜM',
+      badgeColor: 'bg-gray-700/30 text-gray-400 border-gray-600/30',
       highlights: [
         {
           title: 'Toplu Mesaj Görsel Arayüz Onarımı',
