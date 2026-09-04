@@ -311,7 +311,13 @@ export class EvolutionService {
       };
 
       const processItem = (item: any) => {
-        const rawId = String(item.id || item.remoteJid || item.jid || item.number || item.phone || '');
+        // Critical: In Evolution API Contact model, item.id is an internal DB CUID like 'cmtlya1zv3g6b4fb53lq6juyl'.
+        // The real WhatsApp phone JID is stored in item.remoteJid (e.g. '905432252878@s.whatsapp.net').
+        // Therefore, remoteJid MUST take precedence over item.id.
+        let rawId = String(item.remoteJid || item.jid || item.number || item.phone || '');
+        if (!rawId && item.id && (String(item.id).includes('@') || /^\+?\d{7,}/.test(String(item.id)))) {
+          rawId = String(item.id);
+        }
         if (!rawId) return;
 
         // Strictly filter out groups, newsletters, broadcasts, lid, hosted, status
@@ -360,95 +366,48 @@ export class EvolutionService {
         }
       };
 
-      const PAGE_LIMIT = 500;
+      // 1. Primary Source: POST /chat/findContacts/{instance} with { where: {} }
+      try {
+        console.log(`[Evolution Sync] Querying POST /chat/findContacts/${instance} with { where: {} }...`);
+        let res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, { where: {} }).catch((e) => {
+          console.warn(`[Evolution findContacts POST error]: ${e.message}`);
+          return null;
+        });
 
-      // 1. Primary Source: POST /chat/findContacts/{instance} with pagination
-      let offset = 0;
-      let hasMoreContacts = true;
-      while (hasMoreContacts) {
-        try {
-          console.log(`[Evolution Sync] Querying POST /chat/findContacts/${instance} (limit: ${PAGE_LIMIT}, offset: ${offset})...`);
-          let res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, {
-            where: {},
-            limit: PAGE_LIMIT,
-            offset: offset,
-          }).catch((e) => {
-            console.warn(`[Evolution findContacts POST error at offset ${offset}]: ${e.message}`);
-            return null;
-          });
-
-          if (!res && offset === 0) {
-            // Fallback GET for offset 0
-            res = await client.get(`/chat/findContacts/${encodeURIComponent(instance)}?limit=${PAGE_LIMIT}&offset=${offset}`).catch(() => null);
-          }
-
-          const rawContacts = extractList(res?.data);
-          console.log(`[Evolution Sync] findContacts (offset ${offset}) returned ${rawContacts.length} items`);
-
-          if (rawContacts.length === 0) {
-            hasMoreContacts = false;
-            break;
-          }
-
-          for (const item of rawContacts) {
-            processItem(item);
-          }
-
-          if (rawContacts.length < PAGE_LIMIT) {
-            hasMoreContacts = false;
-          } else {
-            offset += PAGE_LIMIT;
-          }
-
-          if (offset > 20000) break; // Safety cutoff
-        } catch (err: any) {
-          console.warn(`[Evolution findContacts error at offset ${offset}]:`, err.message);
-          hasMoreContacts = false;
+        if (!res || extractList(res.data).length === 0) {
+          res = await client.post(`/chat/findContacts/${encodeURIComponent(instance)}`, {}).catch(() => null);
         }
+
+        const rawContacts = extractList(res?.data);
+        console.log(`[Evolution Sync] findContacts returned ${rawContacts.length} items`);
+
+        for (const item of rawContacts) {
+          processItem(item);
+        }
+      } catch (err: any) {
+        console.warn('[Evolution findContacts contacts error]:', err.message);
       }
 
-      // 2. Secondary Guarantee Source: POST /chat/findChats/{instance} with pagination
-      offset = 0;
-      let hasMoreChats = true;
-      while (hasMoreChats) {
-        try {
-          console.log(`[Evolution Sync] Querying POST /chat/findChats/${instance} (limit: ${PAGE_LIMIT}, offset: ${offset})...`);
-          let chatsRes = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, {
-            where: {},
-            limit: PAGE_LIMIT,
-            offset: offset,
-          }).catch((e) => {
-            console.warn(`[Evolution findChats POST error at offset ${offset}]: ${e.message}`);
-            return null;
-          });
+      // 2. Secondary Guarantee Source: POST /chat/findChats/{instance} with { where: {} }
+      try {
+        console.log(`[Evolution Sync] Querying POST /chat/findChats/${instance} with { where: {} }...`);
+        let chatsRes = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, { where: {} }).catch((e) => {
+          console.warn(`[Evolution findChats POST error]: ${e.message}`);
+          return null;
+        });
 
-          if (!chatsRes && offset === 0) {
-            chatsRes = await client.get(`/chat/findChats/${encodeURIComponent(instance)}?limit=${PAGE_LIMIT}&offset=${offset}`).catch(() => null);
-          }
-
-          const rawChats = extractList(chatsRes?.data);
-          console.log(`[Evolution Sync] findChats (offset ${offset}) returned ${rawChats.length} items`);
-
-          if (rawChats.length === 0) {
-            hasMoreChats = false;
-            break;
-          }
-
-          for (const item of rawChats) {
-            processItem(item);
-          }
-
-          if (rawChats.length < PAGE_LIMIT) {
-            hasMoreChats = false;
-          } else {
-            offset += PAGE_LIMIT;
-          }
-
-          if (offset > 20000) break; // Safety cutoff
-        } catch (err: any) {
-          console.warn(`[Evolution findChats error at offset ${offset}]:`, err.message);
-          hasMoreChats = false;
+        if (!chatsRes || extractList(chatsRes.data).length === 0) {
+          chatsRes = await client.post(`/chat/findChats/${encodeURIComponent(instance)}`, {}).catch(() => null);
         }
+
+        const rawChats = extractList(chatsRes?.data);
+        console.log(`[Evolution Sync] findChats returned ${rawChats.length} items`);
+
+        for (const item of rawChats) {
+          processItem(item);
+        }
+      } catch (err: any) {
+        console.warn('[Evolution fetchAllContacts chats error]:', err.message);
       }
 
       console.log(`[Evolution Sync] Total unique valid contacts unified: ${contactsMap.size}`);
